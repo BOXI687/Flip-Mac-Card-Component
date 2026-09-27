@@ -213,6 +213,7 @@ body::before {
 
 /* ================= 翻角图层（由 peel.js 创建） ================= */
 .peel-under,
+.peel-shadow,
 .peel-flap-wrap,
 .peel-flap,
 .peel-flap__front,
@@ -229,29 +230,41 @@ body::before {
   overflow: hidden;
 }
 
-/* 翻页的投影。filter 加在「外层」，才能沿着内层 clip-path 裁出的形状投影
-   下面几个 var(--peel-...) 由 peel.js 按调参面板的值设置，逗号后面是默认值 */
-.peel-flap-wrap {
-  z-index: 40;
-  filter: drop-shadow(0 calc(var(--u) * 6) calc(var(--u) * 9) rgba(0, 0, 0, var(--peel-flap-shadow, 0.38)));
+/* 翻页投在桌面上的影子。外层模糊（每帧由 JS 设置模糊半径和深浅），内层是影子的形状。
+   影子的形状只有它自己那么大（JS 每帧设宽高和位置），模糊的范围就小 */
+.peel-shadow { z-index: 35; }
+.peel-shadow__shape {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: #000;
 }
+
+.peel-flap-wrap { z-index: 40; }
 .peel-flap {
   border-radius: var(--radius);
   overflow: hidden;
   transform-origin: 0 0; /* 镜像矩阵以卡片左上角为原点计算，这里必须对齐 */
+  /* 单独一层：每帧只改变换和裁剪形状，手机上交给显卡去挪，不用重画里面的内容 */
+  will-change: transform;
 }
-.peel-flap__front { filter: blur(var(--peel-blur, 1.2px)); }
+/* 透过纸背看到的反字：内容整个翻页过程中都不变，单独一层，模糊只算一次 */
+.peel-flap__front {
+  filter: blur(var(--peel-blur, 1.2px));
+  will-change: transform;
+}
 .peel-flap__front > .card { position: absolute; inset: 0; }
-.peel-flap__paper { background: var(--peel-paper, rgba(247, 247, 250, 0.84)); }
+/* 纸背。四周一圈极细的暗边：浅色纸角放在浅色壁纸上时，边缘也清楚 */
+.peel-flap__paper {
+  background: var(--peel-paper, rgba(247, 247, 250, 0.84));
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.14);
+}
 
-/* 光影渐变条：一端贴着折痕，一端伸向角尖（位置由 JS 每帧计算） */
+/* 光影渐变：和卡片一样大，渐变的角度和位置由 JS 每帧计算（见 peel.js 的 alongGradient） */
 .peel-grad {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 1200px;
-  height: 2400px;
-  transform-origin: 0 0;
+  inset: 0;
 }
 
 /* ================= 调试层 ================= */
@@ -304,7 +317,7 @@ body::before {
 .tn-sheet {
   --tn-blue: #0a84ff;
   --tn-text2: rgba(235, 235, 245, 0.6);
-  --tn-text3: rgba(235, 235, 245, 0.38);
+  --tn-text3: rgba(235, 235, 245, 0.45); /* 滑块两头的小字：原来太淡，在半透明面板上看不清 */
   position: fixed;
   z-index: 100;
   left: 0;
