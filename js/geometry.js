@@ -1,0 +1,142 @@
+/*
+ * geometry.js —— 翻角效果背后的全部数学
+ *
+ * 核心思想（一句话）：
+ *   把纸的一角 C 拉到手指位置 P，折痕就是线段 CP 的「垂直平分线」。
+ *   折痕把卡片切成两块：
+ *     - 远离 C 的那块：还平躺着（kept）
+ *     - 靠近 C 的那块：被掀起来、翻过去，变成「翻页」(flap)
+ *   翻页的位置 = 被切掉那块沿折痕做一次「镜像」。
+ *
+ * 这个文件只做数学，不碰任何 DOM，所以最容易读懂，也最容易测试。
+ * 坐标系：以卡片左上角为原点 (0,0)，x 向右、y 向下，单位是 px。
+ */
+window.Geometry = (function () {
+  'use strict';
+
+  // ---------- 向量小工具 ----------
+  const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+  const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y });
+  const scale = (a, s) => ({ x: a.x * s, y: a.y * s });
+  const dot = (a, b) => a.x * b.x + a.y * b.y;
+  const length = (a) => Math.hypot(a.x, a.y);
+  const distance = (a, b) => length(sub(a, b));
+  const normalize = (a) => {
+    const l = length(a);
+    return l > 0 ? scale(a, 1 / l) : { x: 0, y: 0 };
+  };
+
+  /** 卡片的矩形轮廓（顺时针四个点） */
+  function rectPolygon(w, h) {
+    return [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }];
+  }
+
+  /** 四个角，name 方便调试显示 */
+  function corners(w, h) {
+    return [
+      { name: 'tl', x: 0, y: 0 },
+      { name: 'tr', x: w, y: 0 },
+      { name: 'br', x: w, y: h },
+      { name: 'bl', x: 0, y: h },
+    ];
+  }
+
+  /**
+   * 计算折痕。
+   *   C: 被拖动的那个角（固定不变）
+   *   P: 角现在被拖到的位置（跟着手指）
+   * 返回：
+   *   M      折痕经过的点（CP 的中点）
+   *   n      折痕的单位法向量（从 C 指向 P 的方向）
+   *   length |CP|，拖动的距离
+   *   dist(X) 点 X 到折痕的「有符号距离」：
+   *            > 0 在平躺那一侧，< 0 在被掀起那一侧（C 所在的一侧）
+   */
+  function fold(C, P) {
+    const d = sub(P, C);
+    const len = length(d);
+    if (len < 0.01) return null; // 还没拖动，没有折痕
+    const n = scale(d, 1 / len);
+    const M = scale(add(C, P), 0.5);
+    return {
+      C, P, M, n,
+      length: len,
+      dist: (X) => (X.x - M.x) * n.x + (X.y - M.y) * n.y,
+    };
+  }
+
+  /**
+   * 用一条直线切多边形，只保留 f(X) >= 0 的那一半。
+   * 这就是经典的 Sutherland–Hodgman 裁剪算法（只用一条裁剪边）。
+   * 逐条边检查：
+   *   - 起点在保留侧 → 保留起点
+   *   - 边跨过了直线 → 把交点加进来
+   */
+  function clipHalfPlane(poly, f) {
+    const out = [];
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % poly.length];
+      const da = f(a);
+      const db = f(b);
+      if (da >= 0) out.push(a);
+      if ((da >= 0) !== (db >= 0)) {
+        const t = da / (da - db); // 线性插值求交点
+        out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * 沿折痕做镜像的 2D 仿射矩阵，直接喂给 CSS 的 matrix(a, b, c, d, e, f)。
+   *
+   *   镜像公式：X' = X - 2 * ((X - M)·n) * n
+   *   展开成矩阵形式：X' = A·X + t
+   *     A = I - 2·n·nᵀ           （2x2 部分）
+   *     t = 2·(M·n)·n             （平移部分）
+   *
+   * CSS matrix(a,b,c,d,e,f) 的含义是：
+   *   x' = a·x + c·y + e
+   *   y' = b·x + d·y + f
+   */
+  function reflectionMatrix(fd) {
+    const { n, M } = fd;
+    const mn = dot(M, n);
+    return [
+      1 - 2 * n.x * n.x, // a
+      -2 * n.x * n.y, // b
+      -2 * n.x * n.y, // c
+      1 - 2 * n.y * n.y, // d
+      2 * mn * n.x, // e
+      2 * mn * n.y, // f
+    ];
+  }
+
+  /** 把点镜像过折痕（调试和测试用，和上面的矩阵是同一个公式） */
+  function reflectPoint(X, fd) {
+    return sub(X, scale(fd.n, 2 * fd.dist(X)));
+  }
+
+  /** 多边形 → CSS clip-path 字符串 */
+  function toClipPath(poly) {
+    if (poly.length < 3) return 'polygon(0 0, 0 0, 0 0)'; // 空形状 = 全部裁掉
+    return 'polygon(' + poly.map((p) => `${p.x.toFixed(2)}px ${p.y.toFixed(2)}px`).join(', ') + ')';
+  }
+
+  /** 多边形面积（鞋带公式），用来判断「翻过去多少了」 */
+  function area(poly) {
+    let s = 0;
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % poly.length];
+      s += a.x * b.y - b.x * a.y;
+    }
+    return Math.abs(s) / 2;
+  }
+
+  return {
+    sub, add, scale, dot, length, distance, normalize,
+    rectPolygon, corners, fold, clipHalfPlane, reflectionMatrix, reflectPoint, toClipPath, area,
+  };
+})();
