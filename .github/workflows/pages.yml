@@ -47,6 +47,17 @@ jobs:
             fi
           done
 
+      # 给 CSS / JS 链接加上「?v=提交编号」。GitHub Pages 会让浏览器缓存文件 10 分钟，
+      # 不加的话刚发布时可能出现「新页面 + 旧脚本」，按钮点了没反应。
+      - name: Add cache-busting version to CSS and JS links
+        run: |
+          for dir in site site/a site/b; do
+            [ -f "$dir/index.html" ] || continue
+            v=$(git -C "$dir" rev-parse --short HEAD)
+            sed -i -E "s#(src|href)=\"((js|css)/[^\"?]+)\"#\1=\"\2?v=$v\"#g" "$dir/index.html"
+            grep -oE '(js|css)/[^"]+\?v=[0-9a-f]+' "$dir/index.html"
+          done
+
       - name: Remove repository metadata from the published site
         run: find site -name '.git' -prune -exec rm -rf {} + ; find site -path '*/.github' -prune -exec rm -rf {} +
 
