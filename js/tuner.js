@@ -15,6 +15,11 @@ window.Tuner = (function () {
   // 同一个网站下的 A / B 版本共用浏览器存储，所以按版本代号分开存
   const VARIANT = document.documentElement.dataset.variant || '';
   const STORE_KEY = 'peel-tuner-v1' + (VARIANT ? ':' + VARIANT : '');
+  // 电脑上侧边栏是开着还是收起：这是「看的习惯」，不是效果参数，所以单独存、各版本共用
+  const SIDE_KEY = 'peel-tuner-sidebar';
+  // 宽屏（电脑、横放的 iPad）用右侧边栏，窄屏（手机）用底部面板。
+  // 和 style.css 里「宽屏：调参面板变成右侧边栏」那段的 900px 是同一条分界线，改的话两边一起改
+  const WIDE_QUERY = '(min-width: 900px)';
   const pct = (v) => `${Math.round(v * 100)}%`;
 
   // ================= 面板上有哪些控件 =================
@@ -162,6 +167,23 @@ window.Tuner = (function () {
       window.localStorage.setItem(STORE_KEY, JSON.stringify(params));
     } catch (e) {
       /* 存不了就算了，不影响当前页面 */
+    }
+  }
+
+  // 侧边栏的开关状态：存过就用存的；没存过（或读不了）返回 null，由调用的地方决定默认
+  function loadSideOpen() {
+    try {
+      const v = window.localStorage.getItem(SIDE_KEY);
+      return v === '1' ? true : v === '0' ? false : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function saveSideOpen(open) {
+    try {
+      window.localStorage.setItem(SIDE_KEY, open ? '1' : '0');
+    } catch (e) {
+      /* 存不了就算了：下次打开还是默认的「开着」 */
     }
   }
 
@@ -381,8 +403,8 @@ window.Tuner = (function () {
     const title = h('h2', 'tn-title', '调参');
     const closeBtn = h('button', 'tn-close', '完成');
     closeBtn.type = 'button';
-    head.append(title, closeBtn);
-    head.append(h('p', 'tn-sub', '一边拖上面的卡片，一边调，改动马上生效'));
+    const sub = h('p', 'tn-sub', '一边拖上面的卡片，一边调，改动马上生效');
+    head.append(title, closeBtn, sub);
 
     const body = h('div', 'tn-body');
     const foot = h('footer', 'tn-foot');
@@ -561,28 +583,76 @@ window.Tuner = (function () {
     document.body.append(sheet);
 
     // ---- 打开 / 关闭 ----
-    function setOpen(open) {
+    const home = document.querySelector('.home');
+    const wideMq = window.matchMedia ? window.matchMedia(WIDE_QUERY) : null;
+    const isWide = () => !!(wideMq && wideMq.matches);
+
+    /**
+     * remember：是不是用户自己点的开 / 关。只有在宽屏上用户自己点的才记下来，
+     * 窄屏的底部面板每次都是收着出现，和以前一样
+     */
+    function setOpen(open, remember) {
       sheet.classList.toggle('is-open', open);
       sheet.setAttribute('aria-hidden', open ? 'false' : 'true');
+      openBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
       // 注意类名不能和按钮的 .tuner-open 重名，否则 body 会套上按钮的样式
       document.body.classList.toggle('is-tuning', open);
       if (!open) manual.classList.remove('is-visible');
+      if (remember && isWide()) saveSideOpen(open);
+      peel.measure(); // 内容区让位后卡片换了地方，量一下（动画结束后还会再量一次）
     }
-    openBtn.addEventListener('click', () => setOpen(true));
-    closeBtn.addEventListener('click', () => setOpen(false));
-    // 点面板外面的空白处关闭 —— 但点卡片不关（开着面板拖卡片正是用法）
+    const isOpen = () => sheet.classList.contains('is-open');
+
+    // 宽屏 / 窄屏切换（比如把浏览器窗口拖窄）时，换一套说法和开关规则
+    function applyMode() {
+      const wide = isWide();
+      // 侧边栏是页面的一部分，不是「弹出来」的对话框
+      sheet.setAttribute('role', wide ? 'complementary' : 'dialog');
+      closeBtn.textContent = wide ? '收起' : '完成';
+      sub.textContent = wide
+        ? '一边拖左边的卡片，一边调，改动马上生效'
+        : '一边拖上面的卡片，一边调，改动马上生效';
+      if (wide) {
+        // 电脑上默认开着：侧边栏不挡卡片，调参是来这里的主要目的；用户收起过就记住
+        setOpen(loadSideOpen() !== false, false);
+      } else if (isOpen()) {
+        setOpen(false, false); // 窗口变窄：别突然冒出一个盖住下半屏的面板
+      }
+    }
+
+    // 第一次摆好时不播放动画（不然一打开页面卡片就从中间滑到左边）
+    document.body.classList.add('tn-instant');
+    applyMode();
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => document.body.classList.remove('tn-instant'))
+    );
+    if (wideMq) {
+      // 老版本 Safari（14 以前）只有 addListener
+      if (wideMq.addEventListener) wideMq.addEventListener('change', applyMode);
+      else if (wideMq.addListener) wideMq.addListener(applyMode);
+    }
+    // 内容区让位的动画结束后再量一次卡片：翻角的坐标换算以卡片的位置为准
+    home.addEventListener('transitionend', (e) => {
+      if (e.target === home) peel.measure();
+    });
+
+    // 「调参」按钮：宽屏上是开关（再点一下收起），手机上面板会盖住它，只管打开
+    openBtn.addEventListener('click', () => setOpen(!isOpen(), true));
+    closeBtn.addEventListener('click', () => setOpen(false, true));
+    // 手机上点面板外面的空白处关闭 —— 但点卡片不关（开着面板拖卡片正是用法）。
+    // 侧边栏不压内容，点页面别处不收起，要收起就点「收起」或「调参」
     document.addEventListener(
       'pointerdown',
       (e) => {
-        if (!sheet.classList.contains('is-open')) return;
+        if (!isOpen() || isWide()) return;
         const t = e.target;
         if (sheet.contains(t) || stackArea.contains(t) || openBtn.contains(t)) return;
-        setOpen(false);
+        setOpen(false, false);
       },
       true
     );
 
-    return { open: () => setOpen(true), close: () => setOpen(false), refresh: refreshAll };
+    return { open: () => setOpen(true, true), close: () => setOpen(false, true), refresh: refreshAll };
   }
 
   return { attach, SECTIONS, STORE_KEY };
