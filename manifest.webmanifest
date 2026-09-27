@@ -1,6 +1,6 @@
 {
   "name": "Peel Widget Stack",
-  "short_name": "Peel A",
+  "short_name": "Peel",
   "description": "iOS 小组件翻角切换交互原型",
   "start_url": "./",
   "scope": "./",
