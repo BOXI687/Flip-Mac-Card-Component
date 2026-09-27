@@ -1,0 +1,12 @@
+# A/B 分支有新提交时只做一件事：告诉 Deploy Pages「该重新发布了」（见 pages.yml 顶部说明）
+name: Variant pushed
+
+on:
+  push:
+    branches: [version-a-opus, version-b-emil]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Branch ${GITHUB_REF_NAME} updated; Deploy Pages will republish the site."

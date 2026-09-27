@@ -652,3 +652,17 @@ body::before {
 .tn-zones i:nth-child(2) { left: 100%; top: 0; }
 .tn-zones i:nth-child(3) { left: 100%; top: 100%; }
 .tn-zones i:nth-child(4) { left: 0; top: 100%; }
+
+/* ================= 版本标签（只在 A / B 版本出现） ================= */
+.variant-tag {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: 5px 12px;
+  font: 600 12px var(--font);
+  color: #fff;
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: 999px;
+}

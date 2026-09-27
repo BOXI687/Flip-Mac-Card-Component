@@ -1,0 +1,58 @@
+# 把三个分支一起发布成一个网站：
+#   /     ← claude/github-cleanup-ux-prototype-541sop（基础版）
+#   /a/   ← version-a-opus
+#   /b/   ← version-b-emil
+#
+# 任何一个分支有新提交都会重新发布。A/B 分支的提交先触发 variant-push.yml，
+# 再由它唤起这里。这样发布总是从默认分支发起，符合 GitHub Pages 默认只允许默认分支发布的规则。
+name: Deploy Pages
+
+on:
+  push:
+    branches: [claude/github-cleanup-ux-prototype-541sop]
+  workflow_run:
+    workflows: [Variant pushed]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/github-cleanup-ux-prototype-541sop
+          path: site
+
+      - name: Check out version branches (skipped if a branch does not exist yet)
+        run: |
+          for pair in "a:version-a-opus" "b:version-b-emil"; do
+            dir="${pair%%:*}"; branch="${pair#*:}"
+            if git ls-remote --exit-code --heads "https://github.com/${GITHUB_REPOSITORY}.git" "$branch" >/dev/null; then
+              git clone --depth 1 --branch "$branch" "https://github.com/${GITHUB_REPOSITORY}.git" "site/$dir"
+            else
+              echo "Branch $branch not found, skipping /$dir/"
+            fi
+          done
+
+      - name: Remove repository metadata from the published site
+        run: find site -name '.git' -prune -exec rm -rf {} + ; find site -path '*/.github' -prune -exec rm -rf {} +
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -12,7 +12,9 @@
 window.Tuner = (function () {
   'use strict';
 
-  const STORE_KEY = 'peel-tuner-v1';
+  // 同一个网站下的 A / B 版本共用浏览器存储，所以按版本代号分开存
+  const VARIANT = document.documentElement.dataset.variant || '';
+  const STORE_KEY = 'peel-tuner-v1' + (VARIANT ? ':' + VARIANT : '');
   const pct = (v) => `${Math.round(v * 100)}%`;
 
   // ================= 面板上有哪些控件 =================

@@ -43,5 +43,14 @@
     document.head.appendChild(s);
   }
 
+  // 7. 版本标签：A / B 版本在页面顶部标出自己是哪个版本，免得看混
+  const variantLabel = document.documentElement.dataset.variantLabel;
+  if (variantLabel) {
+    const tag = document.createElement('div');
+    tag.className = 'variant-tag';
+    tag.textContent = variantLabel;
+    document.querySelector('.home').prepend(tag);
+  }
+
   window.peel = peel; // 方便在控制台里玩：peel.peek('tl')
 })();
