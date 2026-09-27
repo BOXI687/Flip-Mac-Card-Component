@@ -33,7 +33,9 @@
   Tuner.attach(peel);
 
   // 4. 可发现性：打开时自动掀一下右下角，暗示「这里可以拖」（面板里可以关掉）
-  if (peel.params.hintOnLoad) setTimeout(() => peel.peek('br'), 900);
+  //    系统开了「减弱动态效果」就不自动动：没人碰它的东西不该自己动起来
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (peel.params.hintOnLoad && !reduceMotion) setTimeout(() => peel.peek('br'), 900);
 
   // 5. 在 iPhone 上看 console：网址后面加 ?eruda 会加载一个手机端调试面板
   if (/[?&]eruda\b/.test(location.search)) {

@@ -1,5 +1,22 @@
 # Peel Widget Stack · 翻角切换小组件原型
 
+## 这是版本 B · Emil
+
+这一版是先读了 Emil 的几份设计 skill，再严格按他的原则把原型打磨了一遍。和基础版比：
+
+- **纸角上的光影更柔**：弯折处那道高光和下面卡片上的影子都是平滑过渡，不再有一道生硬的亮线；纸角的投影分成「贴边的一层 + 散开的一层」，更像纸真的离开了桌面（emil-surfaces）
+- **调参面板开关更利落**：滑上来 0.3 秒、收下去更快；按钮按下去会轻轻缩一下，像真的按到了（emil-animations、emil-ui-polish）
+- **新增「慢放」**：面板最下面可以把纸角的动画放慢 2 倍 / 4 倍，看清每一帧的细节，只是看的工具，不保存（emil-prototype）
+- **照顾到更多人**：手机开了「减弱动态效果」时，页面不会自己动，松手直接盖回，面板里会说明原因；用键盘也能打开 / 关闭面板，按 Esc 关闭（emil-touch-and-accessibility）
+- **修了几处小毛病**：开关打开时圆钮现在会滑到右边了；选中的色块外圈不再有一圈色差（emil-ui-polish、emil-surfaces）
+
+三个版本放在一起对比：
+[基础版](https://boxi687.github.io/Flip-Mac-Card-Component/) ·
+[版本 A](https://boxi687.github.io/Flip-Mac-Card-Component/a/) ·
+[版本 B](https://boxi687.github.io/Flip-Mac-Card-Component/b/)
+
+---
+
 一个 iOS 桌面小组件的交互原型：两张叠在一起的小组件（电池 / 世界时钟），
 **按住任意一个角拖动**，就能像掀纸一样偷看下面那张；**松手后纸角自动盖回**，上面那张不会换。
 

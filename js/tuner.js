@@ -107,12 +107,25 @@ window.Tuner = (function () {
           key: 'hintOnLoad', label: '打开时自动提示', type: 'switch',
           hint: '每次打开页面，右下角会自己掀一下，告诉人「这里可以拖」',
         },
-        // 辅助线只是「看」的工具：不算效果参数，不保存、也不复制
+        // 辅助线和慢放只是「看」的工具：不算效果参数，不保存、也不复制
         {
           key: 'debug', label: '几何辅助线', type: 'switch', local: true,
           hint: '在卡片上画出折痕和掀起的面积，方便理解原理',
           get: (peel) => peel.debug,
           set: (peel, v) => peel.setDebug(v),
+        },
+        // 慢放：很多动画问题正常速度下看不出来，放慢到 1/4 一眼就能看到
+        {
+          key: 'slowMo', label: '慢放', type: 'segment', local: true, def: 1,
+          hint: '把纸角弹回、掀一下的动画放慢，看清每一帧。只影响现在看，不保存',
+          options: [
+            { value: 1, name: '正常' },
+            { value: 0.5, name: '慢 2 倍' },
+            { value: 0.25, name: '慢 4 倍' },
+          ],
+          show: (v) => (v === 1 ? '正常速度' : `${v} 倍速`),
+          get: (peel) => peel.timeScale,
+          set: (peel, v) => (peel.timeScale = v),
         },
       ],
     },
@@ -200,6 +213,8 @@ window.Tuner = (function () {
     slider.tabIndex = 0;
     slider.setAttribute('role', 'slider');
     slider.setAttribute('aria-label', ctl.label);
+    slider.setAttribute('aria-valuemin', String(ctl.min));
+    slider.setAttribute('aria-valuemax', String(ctl.max));
     const track = h('div', 'tn-slider__track');
     const fill = h('div', 'tn-slider__fill');
     const tick = h('div', 'tn-slider__tick'); // 默认值的位置，调乱了也能找回来
@@ -318,6 +333,24 @@ window.Tuner = (function () {
     };
   }
 
+  /** 分段按钮（iOS 的 segmented control）：几个选项里选一个 */
+  function buildSegment(ctl, api) {
+    const seg = h('div', 'tn-segment');
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', ctl.label);
+    const btns = ctl.options.map((o) => {
+      const b = h('button', 'tn-segment__btn', o.name);
+      b.type = 'button';
+      b.addEventListener('click', () => api.set(ctl, o.value));
+      seg.append(b);
+      return b;
+    });
+    return {
+      nodes: [seg],
+      render: (v) => btns.forEach((b, i) => b.setAttribute('aria-pressed', same(ctl.options[i].value, v) ? 'true' : 'false')),
+    };
+  }
+
   /** 颜色：几个预设色块 + 一个「自定义」取色器 */
   function buildColor(ctl, api) {
     const row = h('div', 'tn-swatches');
@@ -347,7 +380,11 @@ window.Tuner = (function () {
     return {
       nodes: [row],
       render: (v) => {
-        btns.forEach((b, i) => b.classList.toggle('is-selected', same(ctl.swatches[i].color.toLowerCase(), v.toLowerCase())));
+        btns.forEach((b, i) => {
+          const on = same(ctl.swatches[i].color.toLowerCase(), v.toLowerCase());
+          b.classList.toggle('is-selected', on);
+          b.setAttribute('aria-pressed', on ? 'true' : 'false'); // 读屏软件也能知道选中的是哪个
+        });
         const isCustom = nameOf(v) === '自定义';
         custom.classList.toggle('is-selected', isCustom);
         if (isCustom) custom.style.setProperty('--c', v);
@@ -379,6 +416,15 @@ window.Tuner = (function () {
     head.append(h('p', 'tn-sub', '一边拖上面的卡片，一边调，改动马上生效'));
 
     const body = h('div', 'tn-body');
+
+    // 系统开了「减弱动态效果」时，纸角不会播弹回动画 —— 直接在面板里说清楚，
+    // 免得调「回弹」时以为坏了
+    const motionNote = h('p', 'tn-callout', '你的设备开着「减弱动态效果」：松手后纸角直接盖回、不播动画，所以「回弹」和「慢放」暂时看不出区别。');
+    body.append(motionNote);
+    const rmq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+    const syncMotionNote = () => (motionNote.hidden = !(rmq && rmq.matches));
+    syncMotionNote();
+    if (rmq && rmq.addEventListener) rmq.addEventListener('change', syncMotionNote);
     const foot = h('footer', 'tn-foot');
     const toast = h('div', 'tn-toast');
     toast.setAttribute('role', 'status');
@@ -386,6 +432,7 @@ window.Tuner = (function () {
 
     // 角落感应范围的预览：四个角画出能「抓住」的范围
     const zones = h('div', 'tn-zones');
+    zones.setAttribute('aria-hidden', 'true'); // 纯视觉提示，读屏软件跳过
     for (let i = 0; i < 4; i++) zones.append(h('i'));
     stack.append(zones);
     let zonesTimer = 0;
@@ -427,12 +474,8 @@ window.Tuner = (function () {
         const rowHead = h('div', 'tn-row__head');
         const label = h('span', 'tn-label', ctl.label);
         rowHead.append(label);
-        const built =
-          ctl.type === 'switch'
-            ? buildSwitch(ctl, api)
-            : ctl.type === 'color'
-              ? buildColor(ctl, api)
-              : buildSlider(ctl, api);
+        const builders = { switch: buildSwitch, color: buildColor, segment: buildSegment };
+        const built = (builders[ctl.type] || buildSlider)(ctl, api);
         let value = null;
         if (built.head) rowHead.append(built.head);
         else {
@@ -454,7 +497,8 @@ window.Tuner = (function () {
       if (view.value) {
         view.value.textContent = view.ctl.show(v);
         // 改过的值用蓝色显示，一眼看出哪些动过
-        view.value.classList.toggle('is-changed', !same(v, defaults[key]));
+        const def = key in defaults ? defaults[key] : view.ctl.def; // 不算参数的工具（慢放）自带默认值
+        view.value.classList.toggle('is-changed', !same(v, def));
       }
     }
     function refreshAll() {
@@ -482,7 +526,7 @@ window.Tuner = (function () {
       refreshAll();
       showToast('已恢复默认');
     });
-    btn('复制参数', 'tn-btn--primary', () => copyText(exportParams(peel.params)));
+    const copyBtn = btn('复制参数', 'tn-btn--primary', () => copyText(exportParams(peel.params)));
 
     // ---- 提示条 ----
     let toastTimer = 0;
@@ -531,7 +575,10 @@ window.Tuner = (function () {
     manualText.readOnly = true;
     const manualOk = h('button', 'tn-btn tn-btn--primary', '好了');
     manualOk.type = 'button';
-    manualOk.addEventListener('click', () => manual.classList.remove('is-visible'));
+    manualOk.addEventListener('click', () => {
+      manual.classList.remove('is-visible');
+      copyBtn.focus({ preventScroll: true }); // 焦点回到刚才点的按钮，键盘用户不会「迷路」
+    });
     manual.append(
       h('h3', 'tn-manual__title', '没能自动复制'),
       h('p', 'tn-hint', '长按下面的文字 →「全选」→「拷贝」，再发给 Claude'),
@@ -556,14 +603,24 @@ window.Tuner = (function () {
 
     // ---- 打开 / 关闭 ----
     function setOpen(open) {
+      if (open === sheet.classList.contains('is-open')) return;
+      const focusWasInside = sheet.contains(document.activeElement);
       sheet.classList.toggle('is-open', open);
       sheet.setAttribute('aria-hidden', open ? 'false' : 'true');
       // 注意类名不能和按钮的 .tuner-open 重名，否则 body 会套上按钮的样式
       document.body.classList.toggle('is-tuning', open);
+      // 面板盖住了「调参」按钮：盖住期间让它点不到、Tab 也跳不到
+      openBtn.inert = open;
       if (!open) manual.classList.remove('is-visible');
+      // 焦点跟着面板走：打开时移进面板，关上时还给「调参」按钮（键盘 / 读屏用户不会丢失位置）
+      if (open) closeBtn.focus({ preventScroll: true });
+      else if (focusWasInside) openBtn.focus({ preventScroll: true });
     }
     openBtn.addEventListener('click', () => setOpen(true));
     closeBtn.addEventListener('click', () => setOpen(false));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && sheet.classList.contains('is-open')) setOpen(false);
+    });
     // 点面板外面的空白处关闭 —— 但点卡片不关（开着面板拖卡片正是用法）
     document.addEventListener(
       'pointerdown',

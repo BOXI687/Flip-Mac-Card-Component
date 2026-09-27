@@ -12,6 +12,7 @@
  * 状态机（只偷看，不翻页：松手后永远盖回原位，上下顺序不变）：
  *   idle ──按住角落──▶ dragging ──松手──▶ returning（弹回）──▶ idle
  *   returning 过程中可以再次抓住翻页（可打断的动画，iOS 的核心手感之一）
+ *   holding：系统开了「减弱动态效果」时，「掀一下」不播动画，静止停留片刻后直接盖回
  */
 window.PeelStack = (function () {
   'use strict';
@@ -25,6 +26,40 @@ window.PeelStack = (function () {
     return { k: w * w, c: 2 * damping * w };
   }
   const SPRING_PEEK = spring(0.3, 0.9); // 轻点/提示时掀一下（固定，不开放调节）
+
+  // 系统设置里开了「减弱动态效果」：每次用到时现查，用户中途改设置也马上生效。
+  // 手指拖动本身不算动画（纸角跟着手走），照常工作；只有「自己动」的部分会停掉
+  const reduceMotionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  const prefersReducedMotion = () => !!(reduceMotionQuery && reduceMotionQuery.matches);
+  const STATIC_PEEK_MS = 700; // 减弱动态时，「掀一下」不播动画，直接显示掀开的样子停留这么久
+
+  /*
+   * 平滑渐变：CSS 渐变在两个色标之间是直线过渡，色标处会出现一道看得见的「折线」（亮线/暗线）。
+   * 这里在每两个关键点之间补几个中间色标，按 smoothstep 曲线过渡，
+   * 高光就像圆柱面上的反光一样柔和，阴影也会自然淡出、没有硬边。
+   *   rgb：'0,0,0' 或 '255,255,255'；keys：[[位置 0~1, 不透明度], ...]；s：1 对应多少 px
+   */
+  function easedGradient(rgb, keys, s, mult) {
+    const stops = [];
+    const alpha = (a) => Math.min(1, a * mult).toFixed(3);
+    for (let i = 0; i < keys.length - 1; i++) {
+      const [t0, a0] = keys[i];
+      const [t1, a1] = keys[i + 1];
+      for (let j = 0; j < 4; j++) {
+        const u = j / 4;
+        const e = u * u * (3 - 2 * u); // smoothstep：两头平、中间快，色标处没有折角
+        stops.push(`rgba(${rgb},${alpha(a0 + (a1 - a0) * e)}) ${((t0 + (t1 - t0) * u) * s).toFixed(1)}px`);
+      }
+    }
+    const [tn, an] = keys[keys.length - 1];
+    stops.push(`rgba(${rgb},${alpha(an)}) ${(tn * s).toFixed(1)}px`);
+    return `linear-gradient(to right, ${stops.join(', ')})`;
+  }
+
+  // 光影的「形状」（位置 = 从折痕到角尖的比例）。数值沿用原设计稿，只是过渡改成平滑的
+  const FLAP_DARK = [[0, 0.2], [0.1, 0.04], [0.26, 0], [0.6, 0], [1, 0.1]]; // 折痕处的暗部 + 角尖一点压暗
+  const FLAP_LIGHT = [[0, 0], [0.1, 0], [0.26, 0.65], [0.6, 0.1], [1, 0]]; // 卷曲处的那道高光
+  const UNDER_SHADE = [[0, 0.55], [0.22, 0.22], [0.5, 0.06], [0.85, 0]]; // 投在下面卡片上的影子：贴着折痕最深，慢慢淡出
 
   /*
    * ======== 可调参数的默认值（全部集中在这里） ========
@@ -61,6 +96,7 @@ window.PeelStack = (function () {
       this.v = { x: 0, y: 0 }; // P 的速度（px/s），让松手后的动画接得上手指的速度
       this.raf = 0;
       this.debug = false;
+      this.timeScale = 1; // 慢放倍率（调参面板的「慢放」）：1 = 正常，0.25 = 四分之一速度。只是看的工具，不保存
 
       this.buildLayers();
       this.measure();
@@ -80,6 +116,7 @@ window.PeelStack = (function () {
       const make = (cls, parent = this.el) => {
         const d = document.createElement('div');
         d.className = cls;
+        if (parent === this.el) d.setAttribute('aria-hidden', 'true'); // 纯装饰层：读屏软件不要再念一遍克隆出来的内容
         parent.appendChild(d);
         return d;
       };
@@ -95,6 +132,7 @@ window.PeelStack = (function () {
       // 调试层
       this.debugSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       this.debugSvg.setAttribute('class', 'peel-debug');
+      this.debugSvg.setAttribute('aria-hidden', 'true');
       this.el.appendChild(this.debugSvg);
       this.hideLayers();
     }
@@ -268,6 +306,11 @@ window.PeelStack = (function () {
 
     /** 弹回原位（弹簧参数现读，调参面板一改就生效） */
     returnHome() {
+      // 减弱动态：不播弹回动画，直接盖回原位
+      if (prefersReducedMotion()) {
+        this.reset();
+        return;
+      }
       const p = this.params;
       this.animateTo(this.C, spring(p.returnResponse, p.returnDamping), 'returning', () => this.reset());
     }
@@ -311,6 +354,14 @@ window.PeelStack = (function () {
       const peekTo = G.add(this.C, G.scale(toCenter, this.H * 0.42));
       this.v = { x: 0, y: 0 };
       this.bounceDir = toCenter;
+      if (prefersReducedMotion()) {
+        // 减弱动态：不动，直接显示「掀开一角」的样子，停一下再盖回（点击仍然有反馈）
+        this.P = this.limitLift(peekTo);
+        this.state = 'holding';
+        this.holdTimer = setTimeout(() => this.state === 'holding' && this.reset(), STATIC_PEEK_MS);
+        this.startLoop();
+        return;
+      }
       this.animateTo(this.limitLift(peekTo), SPRING_PEEK, 'returning', () => this.returnHome(), 6); // 6 = 离目标 6px 内就开始往回收
     }
 
@@ -328,6 +379,7 @@ window.PeelStack = (function () {
     }
 
     reset() {
+      clearTimeout(this.holdTimer);
       this.state = 'idle';
       this.bounceDir = null;
       if (this.peelCard) {
@@ -364,7 +416,8 @@ window.PeelStack = (function () {
     }
 
     loop(now) {
-      const dt = Math.min((now - this.lastT) / 1000, 1 / 30);
+      // 慢放 = 把每帧走过的时间按比例缩短：弹簧的形状完全一样，只是被拉长了
+      const dt = Math.min((now - this.lastT) / 1000, 1 / 30) * this.timeScale;
       this.lastT = now;
       if (this.state === 'returning') this.stepSpring(dt);
       if (this.state === 'idle') {
@@ -427,27 +480,17 @@ window.PeelStack = (function () {
       const s = f.length / 2; // 折痕到角尖的距离 = 翻页的「宽度」
       const angle = (Math.atan2(-f.n.y, -f.n.x) * 180) / Math.PI;
       const shadeTransform = `translate(${f.M.x}px, ${f.M.y}px) rotate(${angle}deg) translate(0, -50%)`;
-      const px = (r) => `${(r * s).toFixed(1)}px`;
 
       // 高光 / 阴影强度 = 设计稿里的透明度 × 面板里的倍数（最多到 1，不透明就封顶了）
-      const hi = (a) => Math.min(1, a * this.params.highlight).toFixed(3);
-      const sh = (a) => Math.min(1, a * this.params.underShade).toFixed(3);
-
+      // 亮部和暗部分成两层画：黑白分开各自平滑过渡，中间不会混出一道脏灰
+      const hi = this.params.highlight;
       this.flapGrad.style.transform = shadeTransform;
-      this.flapGrad.style.background = `linear-gradient(to right,
-        rgba(0,0,0,${hi(0.2)}) 0px,
-        rgba(0,0,0,${hi(0.04)}) ${px(0.1)},
-        rgba(255,255,255,${hi(0.65)}) ${px(0.26)},
-        rgba(255,255,255,${hi(0.1)}) ${px(0.6)},
-        rgba(0,0,0,${hi(0.1)}) ${px(1)})`;
+      this.flapGrad.style.background = `${easedGradient('255,255,255', FLAP_LIGHT, s, hi)}, ${easedGradient('0,0,0', FLAP_DARK, s, hi)}`;
 
       this.underShade.style.clipPath = this.underShade.style.webkitClipPath = clip;
       this.underGrad.style.transform = shadeTransform;
       this.underGrad.style.opacity = Math.min(1, f.length / 60); // 刚开始拖时阴影淡一点，不突兀
-      this.underGrad.style.background = `linear-gradient(to right,
-        rgba(0,0,0,${sh(0.55)}) 0px,
-        rgba(0,0,0,${sh(0.22)}) ${px(0.22)},
-        rgba(0,0,0,0) ${px(0.85)})`;
+      this.underGrad.style.background = easedGradient('0,0,0', UNDER_SHADE, s, this.params.underShade);
 
       this.drawDebug(f, kept, lifted);
     }

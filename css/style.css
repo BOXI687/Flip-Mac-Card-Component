@@ -13,6 +13,25 @@
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
           "Segoe UI", "Microsoft YaHei", sans-serif;
 
+  /* 动效节奏：界面动画统一用这几个值，同一组东西（面板 + 说明文字）才能步调一致。
+     进场用「先快后慢」的曲线，一出手就有反应；退场比进场快约 25%，用户已经决定离开了，不让人等 */
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-press: 150ms;   /* 按下、悬停、颜色变化 */
+  --dur-enter: 300ms;   /* 面板滑上来 */
+  --dur-exit: 220ms;    /* 面板收下去 */
+  --dur-toast-in: 200ms;
+  --dur-toast-out: 150ms;
+
+  /* 分隔线：高清屏上用 0.5px 的细线，普通屏幕用 1px（0.5px 在普通屏上会糊或消失） */
+  --hairline: 1px;
+
+  /* 层级只用这几档，不随手写 9999 */
+  --z-tag: 5;
+  --z-stack: 10;   /* 掀起的纸角可以盖过版本标签，但仍在调参面板下面 */
+  --z-sheet: 100;
+}
+@media (min-resolution: 2dppx) {
+  :root { --hairline: 0.5px; }
 }
 
 * { box-sizing: border-box; }
@@ -35,7 +54,12 @@ body {
   user-select: none;
   -webkit-touch-callout: none;          /* 禁止长按弹出菜单 */
   -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;  /* 深色底上的白字更细更清楚（macOS 浏览器才有区别） */
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* 按钮和输入框：取消「双击放大」的等待，点一下立刻有反应 */
+button, input { touch-action: manipulation; }
 
 /*
  * 壁纸单独画在一个「钉在屏幕上」的图层里，而不是画在 body 上。
@@ -57,9 +81,15 @@ body::before {
   pointer-events: none;
   background:
     /* 左上角的亮光 */
-    radial-gradient(120% 70% at 15% 0%, rgba(214, 212, 176, 1) 0%, rgba(214, 212, 176, 0) 60%),
+    /* 渐变用「平滑过渡」的多个色标：只写首尾两个色标，大屏上能看出一圈圈的色带 */
+    radial-gradient(120% 70% at 15% 0%,
+      rgba(214, 212, 176, 1) 0%, rgba(214, 212, 176, 0.957) 7.5%, rgba(214, 212, 176, 0.844) 15%,
+      rgba(214, 212, 176, 0.684) 22.5%, rgba(214, 212, 176, 0.5) 30%, rgba(214, 212, 176, 0.316) 37.5%,
+      rgba(214, 212, 176, 0.156) 45%, rgba(214, 212, 176, 0.043) 52.5%, rgba(214, 212, 176, 0) 60%),
     /* 右下角轻轻压暗一点：以前这里是很深的颜色，在手机上看像一块黑斑，现在淡很多、铺得更开 */
-    radial-gradient(130% 70% at 100% 100%, rgba(120, 118, 90, 0.45) 0%, rgba(120, 118, 90, 0) 75%),
+    radial-gradient(130% 70% at 100% 100%,
+      rgba(120, 118, 90, 0.45) 0%, rgba(120, 118, 90, 0.38) 18.75%, rgba(120, 118, 90, 0.225) 37.5%,
+      rgba(120, 118, 90, 0.07) 56.25%, rgba(120, 118, 90, 0) 75%),
     var(--wallpaper);
   background-repeat: no-repeat;
 }
@@ -78,6 +108,7 @@ body::before {
 
 .stack {
   position: relative;
+  z-index: var(--z-stack); /* 同时让卡片、翻页、辅助线的层级只在这一叠里比，不会漏到页面其它部分 */
   width: var(--widget-w);
   height: var(--widget-h);
   touch-action: none; /* 关键！告诉浏览器：这里的手指移动归我处理，不要滚动/缩放 */
@@ -118,7 +149,6 @@ body::before {
   height: 5px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.35);
-  transition: background 0.25s;
 }
 .dots span.is-active { background: rgba(255, 255, 255, 0.95); }
 
@@ -230,10 +260,15 @@ body::before {
 }
 
 /* 翻页的投影。filter 加在「外层」，才能沿着内层 clip-path 裁出的形状投影
-   下面几个 var(--peel-...) 由 peel.js 按调参面板的值设置，逗号后面是默认值 */
+   下面几个 var(--peel-...) 由 peel.js 按调参面板的值设置，逗号后面是默认值
+   投影分两层：一层紧贴纸边、很实（纸角的轮廓），一层散开、很淡（离开桌面的高度感）。
+   只有一层的话只能二选一：要么边缘发虚没轮廓，要么一圈脏黑 */
 .peel-flap-wrap {
   z-index: 40;
-  filter: drop-shadow(0 calc(var(--u) * 6) calc(var(--u) * 9) rgba(0, 0, 0, var(--peel-flap-shadow, 0.38)));
+  --peel-s: var(--peel-flap-shadow, 0.38);
+  filter:
+    drop-shadow(0 calc(var(--u) * 1) calc(var(--u) * 1.5) rgba(0, 0, 0, calc(var(--peel-s) * 0.55)))
+    drop-shadow(0 calc(var(--u) * 7) calc(var(--u) * 12) rgba(0, 0, 0, calc(var(--peel-s) * 0.8)));
 }
 .peel-flap {
   border-radius: var(--radius);
@@ -277,8 +312,10 @@ body::before {
   line-height: 1.6;
   color: rgba(255, 255, 255, 0.82);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-  transition: opacity 0.3s;
+  /* 和面板是一组：时长、曲线都跟面板一样，一起走 */
+  transition: opacity var(--dur-exit) var(--ease-out);
 }
+.is-tuning .hint { transition-duration: var(--dur-enter); }
 .is-tuning .hint { opacity: 0; } /* 面板打开时藏起说明文字，免得从半透明面板后面透出来 */
 
 .tuner-open {
@@ -295,9 +332,11 @@ body::before {
   border-radius: 999px;
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
+  transition: background-color var(--dur-press) ease-out, scale var(--dur-press) ease-out;
 }
 .tuner-open svg { width: 20px; height: 20px; }
-.tuner-open:active { background: rgba(0, 0, 0, 0.4); }
+/* 按下：轻轻缩到 96%，像真的按下去了（再小就夸张了） */
+.tuner-open:active { background: rgba(0, 0, 0, 0.4); scale: 0.96; }
 
 /* ================= 调参面板（由 tuner.js 生成） ================= */
 /* 从底部滑上来的面板。顶部留出小组件的位置：开着面板也能拖卡片、马上看到效果 */
@@ -306,7 +345,7 @@ body::before {
   --tn-text2: rgba(235, 235, 245, 0.6);
   --tn-text3: rgba(235, 235, 245, 0.38);
   position: fixed;
-  z-index: 100;
+  z-index: var(--z-sheet);
   left: 0;
   right: 0;
   bottom: 0;
@@ -322,15 +361,20 @@ body::before {
   -webkit-backdrop-filter: blur(30px) saturate(1.6);
   backdrop-filter: blur(30px) saturate(1.6);
   border-radius: 26px 26px 0 0;
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.22), inset 0 0.5px 0 rgba(255, 255, 255, 0.14);
+  /* 顶边一道细亮线 = 面板的边；下面两层影子：一层贴边、一层散开，让面板浮在壁纸上 */
+  box-shadow:
+    inset 0 var(--hairline) 0 rgba(255, 255, 255, 0.14),
+    0 -1px 3px rgba(0, 0, 0, 0.08),
+    0 -10px 40px rgba(0, 0, 0, 0.2);
   transform: translateY(105%);
   visibility: hidden;
-  transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1), visibility 0s 0.42s;
+  /* 收起：比打开快，并且等滑完再隐藏（隐藏后 Tab 键也不会跳进看不见的面板） */
+  transition: transform var(--dur-exit) var(--ease-out), visibility 0s var(--dur-exit);
 }
 .tn-sheet.is-open {
   transform: none;
   visibility: visible;
-  transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1);
+  transition: transform var(--dur-enter) var(--ease-out);
 }
 
 .tn-head {
@@ -361,6 +405,7 @@ body::before {
   color: var(--tn-blue);
   background: none;
   border: 0;
+  border-radius: 10px; /* 键盘聚焦时的描边跟着圆角走 */
 }
 
 /* 面板内部滚动。页面本身禁止滚动，所以这里要明确允许「竖着划」 */
@@ -385,7 +430,7 @@ body::before {
   background: rgba(255, 255, 255, 0.07);
 }
 .tn-row { padding: 12px 16px 12px; }
-.tn-row + .tn-row { border-top: 0.5px solid rgba(255, 255, 255, 0.1); }
+.tn-row + .tn-row { border-top: var(--hairline) solid rgba(255, 255, 255, 0.1); }
 .tn-row__head {
   display: flex;
   align-items: center;
@@ -407,6 +452,17 @@ body::before {
   line-height: 1.45;
   color: var(--tn-text2);
 }
+/* 「减弱动态效果」提示：只有开了这个系统设置才出现 */
+.tn-callout {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--tn-text2);
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+}
+.tn-callout[hidden] { display: none; }
 .tn-note {
   margin: 16px 6px 4px;
   font-size: 12.5px;
@@ -423,7 +479,7 @@ body::before {
   padding: 0 14px;
   touch-action: pan-y; /* 竖着划 = 滚动面板；横着拖 = 调数值 */
   cursor: pointer;
-  outline: none;
+  outline: none; /* 聚焦描边画在圆点上（见下面 :focus-visible），不画在整条上 */
 }
 .tn-slider__track {
   position: relative;
@@ -458,10 +514,11 @@ body::before {
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 0.5px 4px rgba(0, 0, 0, 0.12), 0 6px 13px rgba(0, 0, 0, 0.12), 0 0.5px 1px rgba(0, 0, 0, 0.16);
-  transition: transform 0.15s;
+  transition: transform var(--dur-press) ease-out;
 }
 .tn-slider.is-active .tn-slider__thumb { transform: scale(1.12); }
-.tn-slider:focus-visible .tn-slider__thumb { box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.6); }
+/* 键盘聚焦：白色描边，和其它按钮的默认描边一个性质，不用品牌蓝（彩色描边和界面打架） */
+.tn-slider:focus-visible .tn-slider__thumb { outline: 2px solid rgba(255, 255, 255, 0.9); outline-offset: 3px; }
 .tn-ends {
   display: flex;
   justify-content: space-between;
@@ -480,7 +537,7 @@ body::before {
   border: 0;
   border-radius: 16px;
   background: rgba(120, 120, 128, 0.32);
-  transition: background 0.25s;
+  transition: background-color 200ms ease-out;
 }
 .tn-switch::after {
   content: "";
@@ -492,7 +549,7 @@ body::before {
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.16);
-  transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+  transition: transform 200ms var(--ease-out);
 }
 /* 开关本身 31px 高，四周再扩出一圈透明的点击范围，凑够 44px */
 .tn-switch::before {
@@ -501,6 +558,8 @@ body::before {
   inset: -7px -4px;
 }
 .tn-switch[aria-checked="true"] { background: #30d158; }
+/* 打开时圆钮滑到右边（51 − 27 − 2×2 = 20px）。以前少了这一句，开和关圆钮都停在左边 */
+.tn-switch[aria-checked="true"]::after { transform: translateX(20px); }
 
 
 /* ---- 颜色色块 ---- */
@@ -522,7 +581,9 @@ body::before {
   color: var(--tn-text2);
   background: none;
   border: 0;
+  transition: scale var(--dur-press) ease-out;
 }
+.tn-swatch:active { scale: 0.96; }
 /* 圆形色块 + 选中时外面一圈白环 */
 .tn-swatch::before {
   content: "";
@@ -532,8 +593,11 @@ body::before {
   background: var(--c);
   box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.3);
 }
+/* 选中的白环用 outline + 留空：中间那道缝是透明的，露出的就是真正的底色。
+   以前用一圈实心深灰「假装」缝隙，只和某一种底色对得上，放在面板半透明的底上会看出一圈色差 */
 .tn-swatch.is-selected::before {
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.3), 0 0 0 3px rgba(40, 40, 42, 1), 0 0 0 5px #fff;
+  outline: 2px solid #fff;
+  outline-offset: 3px;
 }
 .tn-swatch.is-selected { color: #fff; }
 /* 「自定义」：没选中时显示一圈彩虹，选中后显示选的颜色 */
@@ -554,6 +618,11 @@ body::before {
   border: 0;
   opacity: 0; /* 看不见但点得到：点色块就打开系统取色器 */
 }
+/* 取色器本身是透明的，键盘聚焦时把描边画在色块上，不然看不出焦点在哪 */
+.tn-swatch--custom:has(input:focus-visible)::before {
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 3px;
+}
 
 /* ---- 底部按钮 ---- */
 .tn-foot {
@@ -561,7 +630,7 @@ body::before {
   display: flex;
   gap: 8px;
   padding: 10px 16px calc(env(safe-area-inset-bottom) + 10px);
-  border-top: 0.5px solid rgba(255, 255, 255, 0.1);
+  border-top: var(--hairline) solid rgba(255, 255, 255, 0.1);
 }
 .tn-btn {
   flex: 1;
@@ -574,10 +643,17 @@ body::before {
   background: rgba(255, 255, 255, 0.12);
   border: 0;
   border-radius: 12px;
+  transition: background-color var(--dur-press) ease-out, scale var(--dur-press) ease-out;
 }
-.tn-btn:active { background: rgba(255, 255, 255, 0.2); }
+.tn-btn:active { background: rgba(255, 255, 255, 0.2); scale: 0.96; }
 .tn-btn--primary { background: var(--tn-blue); }
 .tn-btn--primary:active { background: #0071e3; }
+/* 悬停效果只给真有鼠标的设备：手机上点一下会「卡」在悬停状态 */
+@media (hover: hover) and (pointer: fine) {
+  .tn-btn:hover { background: rgba(255, 255, 255, 0.16); }
+  .tn-btn--primary:hover { background: #1a8cff; }
+  .tuner-open:hover { background: rgba(0, 0, 0, 0.32); }
+}
 
 /* 「已复制」提示 */
 .tn-toast {
@@ -589,13 +665,19 @@ body::before {
   font-weight: 600;
   background: rgba(60, 60, 64, 0.96);
   border-radius: 999px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  /* 深色面板上黑影子看不见，改成一圈淡白细边来分出层次 */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
   opacity: 0;
   transform: translate(-50%, 8px);
-  transition: opacity 0.2s, transform 0.2s;
+  /* 消失：比出现快，轻轻往下退（同样先快后慢，不用「慢起步」的曲线，那样会显得拖泥带水） */
+  transition: opacity var(--dur-toast-out) var(--ease-out), transform var(--dur-toast-out) var(--ease-out);
   pointer-events: none;
 }
-.tn-toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
+.tn-toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-duration: var(--dur-toast-in);
+}
 
 /* 自动复制失败时：把文字摆出来让人手动拷 */
 .tn-manual {
@@ -615,7 +697,7 @@ body::before {
   flex: 1;
   min-height: 80px;
   padding: 10px;
-  font: 13px/1.5 ui-monospace, Menlo, monospace;
+  font: 16px/1.5 ui-monospace, Menlo, monospace; /* 小于 16px 的输入框，iPhone 聚焦时会自动放大页面 */
   color: #fff;
   background: rgba(255, 255, 255, 0.08);
   border: 0;
@@ -636,7 +718,7 @@ body::before {
   overflow: hidden;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.3s;
+  transition: opacity 200ms ease-out;
 }
 .tn-zones.is-visible { opacity: 1; }
 .tn-zones i {
@@ -659,10 +741,67 @@ body::before {
   top: calc(env(safe-area-inset-top) + 12px);
   left: 50%;
   transform: translateX(-50%);
-  z-index: 5;
+  z-index: var(--z-tag);
   padding: 5px 12px;
   font: 600 12px var(--font);
   color: #fff;
   background: rgba(0, 0, 0, 0.28);
   border-radius: 999px;
+}
+
+/* ---- 分段按钮（「慢放」） ---- */
+.tn-segment {
+  display: flex;
+  gap: 2px;
+  margin-top: 10px;
+  padding: 2px;
+  border-radius: 10px;
+  background: rgba(118, 118, 128, 0.24);
+}
+.tn-segment__btn {
+  position: relative;
+  flex: 1;
+  height: 36px;
+  padding: 0;
+  font: 500 14px var(--font);
+  color: #fff;
+  background: transparent;
+  border: 0;
+  border-radius: 8px; /* 外框 10px − 内边距 2px：内外圆角同心，角上的缝一样宽 */
+  transition: background-color var(--dur-press) ease-out;
+}
+/* 看起来 36px 高，点击范围上下各扩 4px 凑够 44px（左右不扩，免得和隔壁重叠） */
+.tn-segment__btn::before {
+  content: "";
+  position: absolute;
+  inset: -4px 0;
+}
+.tn-segment__btn[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.24); /* 深色底上黑影子看不见，只靠亮一点的底色区分选中 */
+}
+
+/* ================= 减弱动态效果 =================
+   系统设置里开了「减弱动态效果」：界面上所有过渡一律关掉（包括淡入淡出），直接切到结果。
+   纸角的弹簧动画在 peel.js 里处理 */
+@media (prefers-reduced-motion: reduce) {
+  .tn-sheet,
+  .tn-sheet.is-open,
+  .hint,
+  .tn-toast,
+  .tn-toast.is-visible,
+  .tn-zones,
+  .tn-switch,
+  .tn-switch::after,
+  .tn-slider__thumb,
+  .tn-btn,
+  .tn-swatch,
+  .tn-segment__btn,
+  .tuner-open {
+    transition: none;
+  }
+  .tn-btn:active,
+  .tn-swatch:active,
+  .tuner-open:active {
+    scale: none;
+  }
 }
