@@ -53,6 +53,12 @@ window.Tuner = (function () {
           min: 0.2, max: 0.9, step: 0.01, ends: ['要按准角尖', '离角远也行'],
           show: pct, zones: true,
         },
+        {
+          key: 'pressLift', label: '按住时翘一下',
+          hint: '手指刚按住角落、还没拖，纸角就先轻轻翘起一点，告诉你「抓住了」',
+          min: 0, max: 2, step: 0.05, ends: ['不翘', '翘得明显'],
+          show: (v) => (v === 0 ? '关' : pct(v)),
+        },
       ],
     },
     {
