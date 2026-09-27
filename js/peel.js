@@ -160,8 +160,10 @@ window.PeelStack = (function () {
       if (this.pointerId != null) return;
       const p = this.local(e);
 
-      if (this.state === 'returning' && G.distance(p, this.P) < this.H * this.params.cornerHit) {
-        // 动画还没结束又被抓住：从当前位置接着拖，而不是跳回去
+      if (this.state === 'returning' && G.distance(p, this.displayP()) < this.H * this.params.cornerHit) {
+        // 动画还没结束又被抓住：从画面上的当前位置接着拖，而不是跳回去
+        this.P = this.displayP();
+        this.bounceDir = null;
         this.grabOffset = G.sub(this.P, p);
       } else {
         if (this.state !== 'idle') this.reset();
@@ -212,7 +214,12 @@ window.PeelStack = (function () {
 
       // 不管拖了多远、甩得多快，松手都盖回去（只偷看，不翻页）。
       // 松手瞬间的速度交给弹簧，动画才能接得上手指，不会「顿一下」
-      this.v = this.releaseVelocity();
+      // 只保留「朝原位」的那部分速度：往外（掀得更大）的速度如果也带上，
+      // 纸角会先往外冲一下再回来，看起来像出错了
+      const v = this.releaseVelocity(e.timeStamp);
+      const home = G.normalize(G.sub(this.C, this.P));
+      this.v = G.scale(home, Math.max(0, G.dot(v, home)));
+      this.bounceDir = G.scale(home, -1);
       this.returnHome();
     }
 
@@ -265,8 +272,13 @@ window.PeelStack = (function () {
       this.animateTo(this.C, spring(p.returnResponse, p.returnDamping), 'returning', () => this.reset());
     }
 
-    releaseVelocity() {
-      const s = this.samples;
+    /**
+     * 松手瞬间的速度。只看松手前 80ms 内的采样：
+     * 手指停住不动时不会有新的 move 事件，旧采样会一直留着，
+     * 不过滤的话，停了一秒再松手也会带上「一秒前那一下」的速度。
+     */
+    releaseVelocity(releaseT) {
+      const s = this.samples.filter((x) => releaseT - x.t <= 80);
       if (s.length < 2) return { x: 0, y: 0 };
       const a = s[0];
       const b = s[s.length - 1];
@@ -298,11 +310,26 @@ window.PeelStack = (function () {
       const toCenter = G.normalize(G.sub({ x: this.W / 2, y: this.H / 2 }, this.C));
       const peekTo = G.add(this.C, G.scale(toCenter, this.H * 0.42));
       this.v = { x: 0, y: 0 };
+      this.bounceDir = toCenter;
       this.animateTo(this.limitLift(peekTo), SPRING_PEEK, 'returning', () => this.returnHome(), 6); // 6 = 离目标 6px 内就开始往回收
+    }
+
+    /**
+     * 画面上用的角的位置。
+     * 回弹有弹性时，角会冲过原位、跑到卡片外面。直接拿去算折痕的话，
+     * 折痕方向会整个反过来，变成「整张卡都被掀起」——画面上整张卡镜像闪出去一下。
+     * 所以冲过头的那部分沿掀开方向「弹回来」：看起来像纸角碰到桌面轻轻弹了一下。
+     */
+    displayP() {
+      const u = this.bounceDir;
+      if (!u || this.state === 'dragging') return this.P;
+      const s = G.dot(G.sub(this.P, this.C), u);
+      return s >= 0 ? this.P : G.sub(this.P, G.scale(u, 2 * s));
     }
 
     reset() {
       this.state = 'idle';
+      this.bounceDir = null;
       if (this.peelCard) {
         this.peelCard.style.clipPath = '';
         this.peelCard.style.webkitClipPath = '';
@@ -375,7 +402,7 @@ window.PeelStack = (function () {
 
     // ---------------- 渲染：每一帧都在这里 ----------------
     render() {
-      const f = G.fold(this.C, this.P);
+      const f = G.fold(this.C, this.displayP());
       if (!f) {
         this.applyClip(this.peelCard, null);
         this.flap.style.clipPath = this.flap.style.webkitClipPath = G.toClipPath([]);
