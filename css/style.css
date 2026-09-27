@@ -24,17 +24,44 @@ html, body {
   overscroll-behavior: none; /* 禁止 iOS 橡皮筋回弹 */
 }
 
+/* 壁纸的底色。html 也要涂上：万一哪里没盖到，露出来的也是同一个颜色，而不是一条色带 */
+html { background: var(--wallpaper); }
+:root { --wallpaper: #9b9978; }
+
 body {
   font-family: var(--font);
   color: #fff;
-  background:
-    radial-gradient(120% 70% at 15% 0%, #d6d4b0 0%, transparent 60%),
-    radial-gradient(100% 80% at 100% 100%, #5e5d47 0%, transparent 70%),
-    #9b9978;
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;          /* 禁止长按弹出菜单 */
   -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * 壁纸单独画在一个「钉在屏幕上」的图层里，而不是画在 body 上。
+ * 为什么：iPhone「添加到主屏幕」全屏打开时，body 的 height: 100% 不包括最底下
+ * Home 横条那一块。以前渐变画在 body 上，只铺到 body 的高度，下面那一截
+ * 浏览器会把渐变「重复」一遍来填 —— 于是屏幕底部出现一条颜色突变的带子。
+ * 现在：position: fixed 贴着屏幕，高度用 100lvh（屏幕能有的最大高度）再多留一点，
+ * 保证一直铺到屏幕最底下；也不重复。
+ */
+body::before {
+  content: "";
+  position: fixed;
+  z-index: -1; /* 在所有内容下面 */
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(100vh + env(safe-area-inset-bottom) + 40px); /* 老浏览器用这个 */
+  height: calc(100lvh + env(safe-area-inset-bottom) + 40px);
+  pointer-events: none;
+  background:
+    /* 左上角的亮光 */
+    radial-gradient(120% 70% at 15% 0%, rgba(214, 212, 176, 1) 0%, rgba(214, 212, 176, 0) 60%),
+    /* 右下角轻轻压暗一点：以前这里是很深的颜色，在手机上看像一块黑斑，现在淡很多、铺得更开 */
+    radial-gradient(130% 70% at 100% 100%, rgba(120, 118, 90, 0.45) 0%, rgba(120, 118, 90, 0) 75%),
+    var(--wallpaper);
+  background-repeat: no-repeat;
 }
 
 .home {
