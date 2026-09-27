@@ -9,9 +9,8 @@
  *   z 40    flap：翻过来的那一角（顶层卡片的克隆 + 白色「纸背」 + 高光）
  *   z 50    debug：几何辅助线
  *
- * 状态机：
+ * 状态机（只偷看，不翻页：松手后永远盖回原位，上下顺序不变）：
  *   idle ──按住角落──▶ dragging ──松手──▶ returning（弹回）──▶ idle
- *                                  └────▶ flipping（翻走）──▶ idle（顺序已交换）
  *   returning 过程中可以再次抓住翻页（可打断的动画，iOS 的核心手感之一）
  */
 window.PeelStack = (function () {
@@ -25,21 +24,36 @@ window.PeelStack = (function () {
     const w = (2 * Math.PI) / response;
     return { k: w * w, c: 2 * damping * w };
   }
-  const SPRING_RETURN = spring(0.38, 0.82); // 弹回：略带一点回弹，像纸的弹性
-  const SPRING_FLIP = spring(0.55, 1.0); // 翻走：干脆利落
-  const SPRING_PEEK = spring(0.3, 0.9); // 轻点/提示时掀一下
+  const SPRING_PEEK = spring(0.3, 0.9); // 轻点/提示时掀一下（固定，不开放调节）
+
+  /*
+   * ======== 可调参数的默认值（全部集中在这里） ========
+   * 页面上的「调参」面板（js/tuner.js）会实时修改 peel.params 里的这些值。
+   * 在面板里调好后点「复制参数」，把复制出来的数字抄回这里，就成了新的默认值。
+   * 每个值都在用到的那一刻才读取，所以改了立刻生效，不用刷新。
+   */
+  const DEFAULTS = {
+    // ---- 手感 ----
+    returnResponse: 0.38, // 弹回用多久（秒），越小越快
+    returnDamping: 0.82, // 弹回的阻尼：1 = 不回弹，越小越「弹」（面板里显示成「回弹弹性」）
+    maxLift: 0.65, // 最多能掀起整张卡面积的多少（0~1）。快到上限时会越拉越「沉」，像拉橡皮筋
+    cornerHit: 0.45, // 角落热区半径 = 卡片高度 × 这个比例
+    // ---- 外观 ----
+    paperColor: '#f7f7fa', // 纸背颜色
+    paperOpacity: 0.84, // 纸背不透明度：越小，透过纸背看到的反字越清楚
+    flapBlur: 1.2, // 透过纸背看到的字有多模糊（px）
+    highlight: 1, // 卷曲高光强度（1 = 100%）
+    flapShadow: 0.38, // 掀起的纸角投到下面的影子有多深（0~1）
+    underShade: 1, // 下层卡片上阴影的强度（1 = 100%）
+    // ---- 其他 ----
+    hintOnLoad: true, // 打开页面时自动掀一下右下角（main.js 读取）
+  };
 
   class PeelStack {
     constructor(el, options = {}) {
       this.el = el;
-      this.opts = Object.assign(
-        {
-          cornerHit: 0.45, // 角落热区半径 = 卡片高度 × 这个比例
-          flickVelocity: 500, // 甩动超过这个速度（px/s）也算翻页
-          onChange: () => {},
-        },
-        options
-      );
+      // 可调参数：先拷一份默认值，再用 options.params 覆盖（不直接改 DEFAULTS，这样随时能「恢复默认」）
+      this.params = Object.assign({}, DEFAULTS, options.params);
       this.cards = Array.from(el.querySelectorAll(':scope > .card'));
       this.state = 'idle';
       this.C = null; // 被拖的角
@@ -51,6 +65,7 @@ window.PeelStack = (function () {
       this.buildLayers();
       this.measure();
       this.layoutZ();
+      this.applyStyleParams();
 
       this.loop = this.loop.bind(this);
       el.addEventListener('pointerdown', (e) => this.onDown(e));
@@ -84,6 +99,24 @@ window.PeelStack = (function () {
       this.hideLayers();
     }
 
+    /** 修改参数（只传要改的那几个），外观类参数会马上同步到 CSS */
+    setParams(patch) {
+      Object.assign(this.params, patch);
+      this.applyStyleParams();
+    }
+
+    /**
+     * 外观类参数通过 CSS 变量交给 style.css（见 .peel-flap__paper 等规则）。
+     * 手感类参数不用在这里处理：它们在 onUp / render 里每次现读。
+     */
+    applyStyleParams() {
+      const p = this.params;
+      const st = this.el.style;
+      st.setProperty('--peel-paper', hexToRgba(p.paperColor, p.paperOpacity));
+      st.setProperty('--peel-blur', `${p.flapBlur}px`);
+      st.setProperty('--peel-flap-shadow', String(p.flapShadow));
+    }
+
     measure() {
       const r = this.el.getBoundingClientRect();
       this.W = r.width;
@@ -109,7 +142,7 @@ window.PeelStack = (function () {
 
     /** 找离点 p 最近、并且在热区内的角 */
     hitCorner(p) {
-      const hit = this.H * this.opts.cornerHit;
+      const hit = this.H * this.params.cornerHit;
       let best = null;
       let bestD = Infinity;
       for (const c of G.corners(this.W, this.H)) {
@@ -124,10 +157,10 @@ window.PeelStack = (function () {
 
     // ---------------- 手势 ----------------
     onDown(e) {
-      if (this.pointerId != null || this.state === 'flipping') return;
+      if (this.pointerId != null) return;
       const p = this.local(e);
 
-      if (this.state === 'returning' && G.distance(p, this.P) < this.H * this.opts.cornerHit) {
+      if (this.state === 'returning' && G.distance(p, this.P) < this.H * this.params.cornerHit) {
         // 动画还没结束又被抓住：从当前位置接着拖，而不是跳回去
         this.grabOffset = G.sub(this.P, p);
       } else {
@@ -144,7 +177,7 @@ window.PeelStack = (function () {
       this.el.classList.add('is-dragging');
       this.downPoint = p;
       this.moved = false;
-      this.samples = [{ t: e.timeStamp, p }];
+      this.samples = [{ t: e.timeStamp, p: { x: this.P.x, y: this.P.y } }];
       this.startLoop();
       e.preventDefault();
     }
@@ -158,10 +191,11 @@ window.PeelStack = (function () {
         return;
       }
       const p = this.local(e);
-      this.P = G.add(p, this.grabOffset);
+      this.P = this.limitLift(G.add(p, this.grabOffset));
       if (G.distance(p, this.downPoint) > 4) this.moved = true;
-      // 只保留最近 100ms 的采样，用来算松手时的速度
-      this.samples.push({ t: e.timeStamp, p });
+      // 只保留最近 100ms 的采样，用来算松手时的速度。
+      // 记录的是「角」的位置而不是手指：被橡皮筋拉住时角其实没怎么动，速度也不该算进去
+      this.samples.push({ t: e.timeStamp, p: { x: this.P.x, y: this.P.y } });
       while (this.samples.length > 2 && e.timeStamp - this.samples[0].t > 100) this.samples.shift();
     }
 
@@ -176,16 +210,59 @@ window.PeelStack = (function () {
         return;
       }
 
+      // 不管拖了多远、甩得多快，松手都盖回去（只偷看，不翻页）。
+      // 松手瞬间的速度交给弹簧，动画才能接得上手指，不会「顿一下」
       this.v = this.releaseVelocity();
-      const f = G.fold(this.C, this.P);
-      const center = { x: this.W / 2, y: this.H / 2 };
-      const vAlong = f ? G.dot(this.v, f.n) : 0; // 速度在拖动方向上的分量
-      // 翻页条件：折痕越过卡片中心（翻过一半） 或者 快速甩动
-      let flip = !!f && (f.dist(center) < 0 || (vAlong > this.opts.flickVelocity && f.length > 20));
-      if (vAlong < -300) flip = false; // 往回甩 = 反悔
+      this.returnHome();
+    }
 
-      if (flip) this.flipAway(f.n);
-      else this.animateTo(this.C, SPRING_RETURN, 'returning', () => this.reset());
+    /**
+     * 限制「最多能掀多大」：沿拖动方向，角最远能到 dMax（此时掀起面积 = maxLift）。
+     * 不是硬生生卡住，而是快到上限时越拉越沉（橡皮筋），更像真的纸。
+     *   前 70% 的距离：完全跟手
+     *   之后：用 1 - e^(-x) 曲线，无限接近 dMax 但永远到不了
+     */
+    limitLift(P) {
+      const d = G.sub(P, this.C);
+      const len = G.length(d);
+      if (len < 0.01) return P;
+      const u = G.scale(d, 1 / len);
+      const dMax = this.maxLiftDistance(u);
+      const knee = dMax * 0.7;
+      if (len <= knee) return P;
+      const range = dMax - knee;
+      const eased = knee + range * (1 - Math.exp(-(len - knee) / range));
+      return G.add(this.C, G.scale(u, eased));
+    }
+
+    /** 沿方向 u 拖多远，掀起的面积正好等于 maxLift？（二分查找，每帧十几次，很便宜） */
+    maxLiftDistance(u) {
+      const target = this.params.maxLift;
+      const lifted = (len) => {
+        const f = G.fold(this.C, G.add(this.C, G.scale(u, len)));
+        return f ? this.liftedFraction(f) : 0;
+      };
+      let lo = 0;
+      let hi = 2 * (this.W + this.H); // 足够远：折痕肯定越过了整张卡
+      if (lifted(hi) < target) return Infinity; // 往卡片外面拖：怎么拖都掀不起来，不用限制
+      for (let i = 0; i < 18; i++) {
+        const mid = (lo + hi) / 2;
+        if (lifted(mid) < target) lo = mid;
+        else hi = mid;
+      }
+      return lo;
+    }
+
+    /** 被掀起的部分占整张卡片面积的比例（0 ~ 1） */
+    liftedFraction(f) {
+      const lifted = G.clipHalfPlane(G.rectPolygon(this.W, this.H), (X) => -f.dist(X));
+      return G.area(lifted) / (this.W * this.H);
+    }
+
+    /** 弹回原位（弹簧参数现读，调参面板一改就生效） */
+    returnHome() {
+      const p = this.params;
+      this.animateTo(this.C, spring(p.returnResponse, p.returnDamping), 'returning', () => this.reset());
     }
 
     releaseVelocity() {
@@ -198,12 +275,11 @@ window.PeelStack = (function () {
       return { x: (b.p.x - a.p.x) / dt, y: (b.p.y - a.p.y) / dt };
     }
 
-    // ---------------- 翻页生命周期 ----------------
+    // ---------------- 掀角生命周期 ----------------
     beginPeel(corner) {
       this.C = { x: corner.x, y: corner.y };
       this.P = { x: corner.x, y: corner.y };
       this.peelCard = this.top;
-      this.swapped = false;
       // 把顶层卡片克隆一份放到翻页上。镜像之后，它就像「透过纸背看到的反字」
       const clone = this.peelCard.cloneNode(true);
       clone.removeAttribute('aria-label');
@@ -211,7 +287,6 @@ window.PeelStack = (function () {
       this.flapFront.replaceChildren(clone);
       this.flapWrap.style.display = 'block';
       this.underShade.style.display = 'block';
-      this.flapWrap.style.opacity = 1;
     }
 
     /** 轻轻掀起再放下（点角落 / 首次提示） */
@@ -223,28 +298,7 @@ window.PeelStack = (function () {
       const toCenter = G.normalize(G.sub({ x: this.W / 2, y: this.H / 2 }, this.C));
       const peekTo = G.add(this.C, G.scale(toCenter, this.H * 0.42));
       this.v = { x: 0, y: 0 };
-      const back = () => this.animateTo(this.C, SPRING_RETURN, 'returning', () => this.reset());
-      this.animateTo(peekTo, SPRING_PEEK, 'returning', back, 6); // 6 = 离目标 6px 内就开始往回收
-    }
-
-    flipAway(n) {
-      // 目标：沿拖动方向拉得足够远，让折痕完全越过整张卡片
-      let far = 0;
-      for (const X of G.corners(this.W, this.H)) far = Math.max(far, G.dot(G.sub(X, this.C), n));
-      const target = G.add(this.C, G.scale(n, far * 2 + this.W * 0.9));
-      this.animateTo(target, SPRING_FLIP, 'flipping', () => this.reset(), 20);
-    }
-
-    /** 顶层卡片完全被掀走的那一刻：交换顺序 */
-    swapCards() {
-      if (this.swapped) return;
-      this.swapped = true;
-      this.peelCard.style.clipPath = '';
-      this.peelCard.style.webkitClipPath = '';
-      this.cards.push(this.cards.shift());
-      this.layoutZ();
-      this.underShade.style.display = 'none';
-      this.opts.onChange(this.cards);
+      this.animateTo(this.limitLift(peekTo), SPRING_PEEK, 'returning', () => this.returnHome(), 6); // 6 = 离目标 6px 内就开始往回收
     }
 
     reset() {
@@ -285,7 +339,7 @@ window.PeelStack = (function () {
     loop(now) {
       const dt = Math.min((now - this.lastT) / 1000, 1 / 30);
       this.lastT = now;
-      if (this.state === 'returning' || this.state === 'flipping') this.stepSpring(dt);
+      if (this.state === 'returning') this.stepSpring(dt);
       if (this.state === 'idle') {
         this.raf = 0;
         return;
@@ -335,10 +389,7 @@ window.PeelStack = (function () {
       const lifted = G.clipHalfPlane(rect, (X) => -f.dist(X)); // 被掀起的部分
 
       // 1) 顶层卡片：只显示平躺的部分
-      if (!this.swapped) {
-        if (kept.length < 3) this.swapCards();
-        else this.applyClip(this.peelCard, kept);
-      }
+      this.applyClip(this.peelCard, kept);
 
       // 2) 翻页：裁出被掀起的部分，再沿折痕镜像过去
       const clip = G.toClipPath(lifted);
@@ -351,28 +402,25 @@ window.PeelStack = (function () {
       const shadeTransform = `translate(${f.M.x}px, ${f.M.y}px) rotate(${angle}deg) translate(0, -50%)`;
       const px = (r) => `${(r * s).toFixed(1)}px`;
 
+      // 高光 / 阴影强度 = 设计稿里的透明度 × 面板里的倍数（最多到 1，不透明就封顶了）
+      const hi = (a) => Math.min(1, a * this.params.highlight).toFixed(3);
+      const sh = (a) => Math.min(1, a * this.params.underShade).toFixed(3);
+
       this.flapGrad.style.transform = shadeTransform;
       this.flapGrad.style.background = `linear-gradient(to right,
-        rgba(0,0,0,0.20) 0px,
-        rgba(0,0,0,0.04) ${px(0.1)},
-        rgba(255,255,255,0.65) ${px(0.26)},
-        rgba(255,255,255,0.10) ${px(0.6)},
-        rgba(0,0,0,0.10) ${px(1)})`;
+        rgba(0,0,0,${hi(0.2)}) 0px,
+        rgba(0,0,0,${hi(0.04)}) ${px(0.1)},
+        rgba(255,255,255,${hi(0.65)}) ${px(0.26)},
+        rgba(255,255,255,${hi(0.1)}) ${px(0.6)},
+        rgba(0,0,0,${hi(0.1)}) ${px(1)})`;
 
       this.underShade.style.clipPath = this.underShade.style.webkitClipPath = clip;
       this.underGrad.style.transform = shadeTransform;
       this.underGrad.style.opacity = Math.min(1, f.length / 60); // 刚开始拖时阴影淡一点，不突兀
       this.underGrad.style.background = `linear-gradient(to right,
-        rgba(0,0,0,0.55) 0px,
-        rgba(0,0,0,0.22) ${px(0.22)},
+        rgba(0,0,0,${sh(0.55)}) 0px,
+        rgba(0,0,0,${sh(0.22)}) ${px(0.22)},
         rgba(0,0,0,0) ${px(0.85)})`;
-
-      // 4) 翻走阶段：折痕越过卡片后，让翻页渐渐淡出
-      if (this.state === 'flipping') {
-        let beyond = Infinity;
-        for (const X of rect) beyond = Math.min(beyond, -f.dist(X));
-        this.flapWrap.style.opacity = Math.max(0, 1 - Math.max(0, beyond) / (this.W * 0.45));
-      }
 
       this.drawDebug(f, kept, lifted);
     }
@@ -409,9 +457,18 @@ window.PeelStack = (function () {
         <line x1="${f.C.x}" y1="${f.C.y}" x2="${f.P.x}" y2="${f.P.y}" stroke="#0a84ff" stroke-width="1.5"/>
         ${dot(f.C, '#ff9f0a', 'C 角')}
         ${dot(f.M, '#ff375f', 'M 中点')}
-        ${dot(f.P, '#0a84ff', 'P 手指')}`;
+        ${dot(f.P, '#0a84ff', 'P 手指')}
+        <text x="8" y="${this.H - 10}" fill="#fff">掀起 ${Math.round(this.liftedFraction(f) * 100)}%（上限 ${Math.round(this.params.maxLift * 100)}%）</text>`;
     }
   }
 
+  /** '#rrggbb' + 不透明度 → 'rgba(r,g,b,a)' */
+  function hexToRgba(hex, a) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    const n = m ? parseInt(m[1], 16) : 0xf7f7fa;
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+  }
+
+  PeelStack.DEFAULTS = Object.freeze(Object.assign({}, DEFAULTS)); // 给调参面板用（「恢复默认」）
   return PeelStack;
 })();

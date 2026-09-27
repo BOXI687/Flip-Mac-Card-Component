@@ -20,36 +20,22 @@
   ];
 
   const stack = document.getElementById('stack');
-  const dots = Array.from(document.querySelectorAll('#dots span'));
 
   // 1. 画组件
   Widgets.renderBattery(stack.querySelector('.card--battery'), DEVICES);
   Widgets.renderClocks(stack.querySelector('.card--clock'), CITIES);
   Widgets.startClockTicker();
 
-  // 2. 右侧的小圆点：告诉用户现在是第几张（和 iOS 智能叠放一样）
-  const allCards = Array.from(stack.querySelectorAll(':scope > .card'));
-  function updateDots(order) {
-    const topIndex = allCards.indexOf(order[0]);
-    dots.forEach((d, i) => d.classList.toggle('is-active', i === topIndex));
-  }
+  // 2. 启动翻角交互（只偷看、不翻页，所以右侧小圆点固定停在第一个，写在 index.html 里）
+  const peel = new PeelStack(stack);
 
-  // 3. 启动翻角交互
-  const peel = new PeelStack(stack, { onChange: updateDots });
-  updateDots(peel.cards);
+  // 3. 调参面板：会先把上次调好的参数装回来，所以要在「首次提示」之前
+  Tuner.attach(peel);
 
-  // 4. 可发现性：第一次打开时自动掀一下右下角，暗示「这里可以拖」
-  setTimeout(() => peel.peek('br'), 900);
+  // 4. 可发现性：打开时自动掀一下右下角，暗示「这里可以拖」（面板里可以关掉）
+  if (peel.params.hintOnLoad) setTimeout(() => peel.peek('br'), 900);
 
-  // 5. 调试开关：显示折痕、C/M/P 三个点、两块多边形
-  const debugBtn = document.getElementById('debugToggle');
-  debugBtn.addEventListener('click', () => {
-    const on = !stack.classList.contains('show-debug');
-    peel.setDebug(on);
-    debugBtn.textContent = on ? '隐藏几何辅助线' : '显示几何辅助线';
-  });
-
-  // 6. 在 iPhone 上看 console：网址后面加 ?eruda 会加载一个手机端调试面板
+  // 5. 在 iPhone 上看 console：网址后面加 ?eruda 会加载一个手机端调试面板
   if (/[?&]eruda\b/.test(location.search)) {
     const s = document.createElement('script');
     s.src = 'https://cdn.jsdelivr.net/npm/eruda@3';

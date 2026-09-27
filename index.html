@@ -25,18 +25,23 @@
         <section class="card card--battery" aria-label="电池"></section>
         <section class="card card--clock" aria-label="世界时钟"></section>
       </div>
-      <div class="dots" id="dots" aria-hidden="true"><span></span><span></span></div>
+      <div class="dots" id="dots" aria-hidden="true"><span class="is-active"></span><span></span></div>
     </div>
 
-    <p class="hint">按住卡片任意一角拖动，偷看下面那张<br>拖过一半或快速一甩，松手就翻页</p>
+    <p class="hint">按住卡片任意一角拖动，偷看下面那张<br>松手自动盖回</p>
 
-    <button class="debug-toggle" id="debugToggle" type="button">显示几何辅助线</button>
+    <!-- 调参面板的入口：面板本身由 js/tuner.js 生成 -->
+    <button class="tuner-open" id="tunerOpen" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="15" cy="7" r="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="17" r="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      调参
+    </button>
   </main>
 
   <!-- 普通 script（不用 module），这样双击 index.html 也能直接打开 -->
   <script src="js/geometry.js"></script>
   <script src="js/widgets.js"></script>
   <script src="js/peel.js"></script>
+  <script src="js/tuner.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

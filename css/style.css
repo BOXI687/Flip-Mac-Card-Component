@@ -12,6 +12,7 @@
   --orange: #ff9f0a;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
           "Segoe UI", "Microsoft YaHei", sans-serif;
+
 }
 
 * { box-sizing: border-box; }
@@ -201,19 +202,20 @@ body {
   overflow: hidden;
 }
 
-/* 翻页的投影。filter 加在「外层」，才能沿着内层 clip-path 裁出的形状投影 */
+/* 翻页的投影。filter 加在「外层」，才能沿着内层 clip-path 裁出的形状投影
+   下面几个 var(--peel-...) 由 peel.js 按调参面板的值设置，逗号后面是默认值 */
 .peel-flap-wrap {
   z-index: 40;
-  filter: drop-shadow(0 calc(var(--u) * 6) calc(var(--u) * 9) rgba(0, 0, 0, 0.38));
+  filter: drop-shadow(0 calc(var(--u) * 6) calc(var(--u) * 9) rgba(0, 0, 0, var(--peel-flap-shadow, 0.38)));
 }
 .peel-flap {
   border-radius: var(--radius);
   overflow: hidden;
   transform-origin: 0 0; /* 镜像矩阵以卡片左上角为原点计算，这里必须对齐 */
 }
-.peel-flap__front { filter: blur(1.2px); }
+.peel-flap__front { filter: blur(var(--peel-blur, 1.2px)); }
 .peel-flap__front > .card { position: absolute; inset: 0; }
-.peel-flap__paper { background: rgba(247, 247, 250, 0.84); }
+.peel-flap__paper { background: var(--peel-paper, rgba(247, 247, 250, 0.84)); }
 
 /* 光影渐变条：一端贴着折痕，一端伸向角尖（位置由 JS 每帧计算） */
 .peel-grad {
@@ -248,12 +250,18 @@ body {
   line-height: 1.6;
   color: rgba(255, 255, 255, 0.82);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: opacity 0.3s;
 }
+.is-tuning .hint { opacity: 0; } /* 面板打开时藏起说明文字，免得从半透明面板后面透出来 */
 
-.debug-toggle {
+.tuner-open {
   margin-top: auto;
-  padding: 10px 18px;
-  font: 500 14px var(--font);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 10px 18px 10px 14px;
+  font: 500 15px var(--font);
   color: #fff;
   background: rgba(0, 0, 0, 0.25);
   border: 0;
@@ -261,3 +269,359 @@ body {
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
 }
+.tuner-open svg { width: 20px; height: 20px; }
+.tuner-open:active { background: rgba(0, 0, 0, 0.4); }
+
+/* ================= 调参面板（由 tuner.js 生成） ================= */
+/* 从底部滑上来的面板。顶部留出小组件的位置：开着面板也能拖卡片、马上看到效果 */
+.tn-sheet {
+  --tn-blue: #0a84ff;
+  --tn-text2: rgba(235, 235, 245, 0.6);
+  --tn-text3: rgba(235, 235, 245, 0.38);
+  position: fixed;
+  z-index: 100;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* 面板顶边 = 小组件底边再往下 36px（和 .home 的上边距对应） */
+  top: calc(env(safe-area-inset-top) + 80px + var(--widget-h) + 36px);
+  display: flex;
+  flex-direction: column;
+  max-width: 560px;
+  margin: 0 auto;
+  font-family: var(--font);
+  color: #fff;
+  background: rgba(30, 30, 32, 0.78);
+  -webkit-backdrop-filter: blur(30px) saturate(1.6);
+  backdrop-filter: blur(30px) saturate(1.6);
+  border-radius: 26px 26px 0 0;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.22), inset 0 0.5px 0 rgba(255, 255, 255, 0.14);
+  transform: translateY(105%);
+  visibility: hidden;
+  transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1), visibility 0s 0.42s;
+}
+.tn-sheet.is-open {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.tn-head {
+  position: relative;
+  flex: none;
+  padding: 16px 20px 10px;
+}
+.tn-grabber {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 36px;
+  height: 5px;
+  margin-left: -18px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.22);
+}
+.tn-title { margin: 0; font-size: 20px; font-weight: 700; }
+.tn-sub { margin: 2px 0 0; font-size: 13px; color: var(--tn-text2); }
+.tn-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  min-width: 44px; /* 手指点的范围至少 44 × 44 */
+  min-height: 44px;
+  padding: 0 12px;
+  font: 600 17px var(--font);
+  color: var(--tn-blue);
+  background: none;
+  border: 0;
+}
+
+/* 面板内部滚动。页面本身禁止滚动，所以这里要明确允许「竖着划」 */
+.tn-body {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  padding: 0 16px 16px;
+}
+.tn-section {
+  margin: 18px 4px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tn-text2);
+}
+.tn-group {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.tn-row { padding: 12px 16px 12px; }
+.tn-row + .tn-row { border-top: 0.5px solid rgba(255, 255, 255, 0.1); }
+.tn-row__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 24px;
+}
+.tn-label { font-size: 16px; font-weight: 500; }
+.tn-value {
+  flex: none;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tn-text2);
+}
+.tn-value.is-changed { color: #64d2ff; } /* 调过的值：蓝色 */
+.tn-hint {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--tn-text2);
+}
+.tn-note {
+  margin: 16px 6px 4px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--tn-text3);
+}
+
+/* ---- 滑块 ---- */
+/* 整条都是触摸区（44px 高）；左右各留半个圆点的宽度，圆点拖到头也不会出界 */
+.tn-slider {
+  position: relative;
+  height: 44px;
+  margin-top: 0;
+  padding: 0 14px;
+  touch-action: pan-y; /* 竖着划 = 滚动面板；横着拖 = 调数值 */
+  cursor: pointer;
+  outline: none;
+}
+.tn-slider__track {
+  position: relative;
+  top: 20px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
+}
+.tn-slider__fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 2px;
+  background: var(--tn-blue);
+}
+.tn-slider__tick {
+  position: absolute;
+  top: -5px;
+  width: 2px;
+  height: 14px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.35);
+}
+.tn-slider__thumb {
+  position: absolute;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0.5px 4px rgba(0, 0, 0, 0.12), 0 6px 13px rgba(0, 0, 0, 0.12), 0 0.5px 1px rgba(0, 0, 0, 0.16);
+  transition: transform 0.15s;
+}
+.tn-slider.is-active .tn-slider__thumb { transform: scale(1.12); }
+.tn-slider:focus-visible .tn-slider__thumb { box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.6); }
+.tn-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -4px;
+  font-size: 11.5px;
+  color: var(--tn-text3);
+}
+
+/* ---- 开关（iOS 样式） ---- */
+.tn-switch {
+  position: relative;
+  flex: none;
+  width: 51px;
+  height: 31px;
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: rgba(120, 120, 128, 0.32);
+  transition: background 0.25s;
+}
+.tn-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.16);
+  transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+}
+/* 开关本身 31px 高，四周再扩出一圈透明的点击范围，凑够 44px */
+.tn-switch::before {
+  content: "";
+  position: absolute;
+  inset: -7px -4px;
+}
+.tn-switch[aria-checked="true"] { background: #30d158; }
+
+
+/* ---- 颜色色块 ---- */
+.tn-swatches {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+.tn-swatch {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 52px;
+  padding: 0;
+  font: 12px var(--font);
+  color: var(--tn-text2);
+  background: none;
+  border: 0;
+}
+/* 圆形色块 + 选中时外面一圈白环 */
+.tn-swatch::before {
+  content: "";
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.3);
+}
+.tn-swatch.is-selected::before {
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.3), 0 0 0 3px rgba(40, 40, 42, 1), 0 0 0 5px #fff;
+}
+.tn-swatch.is-selected { color: #fff; }
+/* 「自定义」：没选中时显示一圈彩虹，选中后显示选的颜色 */
+.tn-swatch--custom::before {
+  background: conic-gradient(#ff453a, #ff9f0a, #ffd60a, #30d158, #64d2ff, #0a84ff, #bf5af2, #ff453a);
+}
+.tn-swatch--custom.is-selected::before {
+  background: radial-gradient(var(--c) 55%, transparent 57%),
+    conic-gradient(#ff453a, #ff9f0a, #ffd60a, #30d158, #64d2ff, #0a84ff, #bf5af2, #ff453a);
+}
+.tn-swatch--custom input {
+  position: absolute;
+  top: 0;
+  left: 9px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  opacity: 0; /* 看不见但点得到：点色块就打开系统取色器 */
+}
+
+/* ---- 底部按钮 ---- */
+.tn-foot {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px calc(env(safe-area-inset-bottom) + 10px);
+  border-top: 0.5px solid rgba(255, 255, 255, 0.1);
+}
+.tn-btn {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 8px;
+  font: 600 15px var(--font);
+  color: #fff;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.12);
+  border: 0;
+  border-radius: 12px;
+}
+.tn-btn:active { background: rgba(255, 255, 255, 0.2); }
+.tn-btn--primary { background: var(--tn-blue); }
+.tn-btn--primary:active { background: #0071e3; }
+
+/* 「已复制」提示 */
+.tn-toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 76px);
+  padding: 9px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  background: rgba(60, 60, 64, 0.96);
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+}
+.tn-toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
+
+/* 自动复制失败时：把文字摆出来让人手动拷 */
+.tn-manual {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px 16px calc(env(safe-area-inset-bottom) + 12px);
+  background: #1e1e20; /* 不透明：别让下面的滑块透出来 */
+  border-radius: inherit;
+}
+.tn-manual.is-visible { display: flex; }
+.tn-manual__title { margin: 0; font-size: 18px; }
+.tn-manual__text {
+  flex: 1;
+  min-height: 80px;
+  padding: 10px;
+  font: 13px/1.5 ui-monospace, Menlo, monospace;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 0;
+  border-radius: 10px;
+  resize: none;
+  -webkit-user-select: text; /* 页面整体禁止选字，这里要打开 */
+  user-select: text;
+  touch-action: pan-y;
+}
+.tn-manual .tn-btn { flex: none; }
+
+/* 角落感应范围的预览：四个角各画一个圆 */
+.tn-zones {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  border-radius: var(--radius);
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.tn-zones.is-visible { opacity: 1; }
+.tn-zones i {
+  position: absolute;
+  width: calc(var(--r, 0px) * 2);
+  height: calc(var(--r, 0px) * 2);
+  margin: calc(var(--r, 0px) * -1) 0 0 calc(var(--r, 0px) * -1);
+  border-radius: 50%;
+  background: rgba(10, 132, 255, 0.28);
+  box-shadow: inset 0 0 0 1.5px rgba(100, 210, 255, 0.9);
+}
+.tn-zones i:nth-child(1) { left: 0; top: 0; }
+.tn-zones i:nth-child(2) { left: 100%; top: 0; }
+.tn-zones i:nth-child(3) { left: 100%; top: 100%; }
+.tn-zones i:nth-child(4) { left: 0; top: 100%; }
