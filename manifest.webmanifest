@@ -1,0 +1,13 @@
+{
+  "name": "Peel Widget Stack",
+  "short_name": "Peel",
+  "description": "iOS 小组件翻角切换交互原型",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#9b9978",
+  "theme_color": "#8d8b6b",
+  "icons": [
+    { "src": "icons/apple-touch-icon.png", "sizes": "511x511", "type": "image/png", "purpose": "any" }
+  ]
+}

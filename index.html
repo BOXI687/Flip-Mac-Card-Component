@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <!-- viewport-fit=cover：让页面铺满刘海屏；user-scalable=no：禁止双指缩放打断手势 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+
+  <!-- 「添加到主屏幕」后像 App 一样全屏打开 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Peel">
+  <meta name="theme-color" content="#8d8b6b">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+  <title>Peel Widget Stack</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="home">
+    <div class="stack-area">
+      <!-- 叠放的小组件：第一个 .card 在最上面 -->
+      <div class="stack" id="stack">
+        <section class="card card--battery" aria-label="电池"></section>
+        <section class="card card--clock" aria-label="世界时钟"></section>
+      </div>
+      <div class="dots" id="dots" aria-hidden="true"><span></span><span></span></div>
+    </div>
+
+    <p class="hint">按住卡片任意一角拖动，偷看下面那张<br>拖过一半或快速一甩，松手就翻页</p>
+
+    <button class="debug-toggle" id="debugToggle" type="button">显示几何辅助线</button>
+  </main>
+
+  <!-- 普通 script（不用 module），这样双击 index.html 也能直接打开 -->
+  <script src="js/geometry.js"></script>
+  <script src="js/widgets.js"></script>
+  <script src="js/peel.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

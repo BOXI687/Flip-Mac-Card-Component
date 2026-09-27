@@ -1,0 +1,263 @@
+/* ================= 设计变量 ================= */
+:root {
+  /* iPhone 中号小组件的设计尺寸是 338 × 158（pt）。
+     屏幕窄的时候等比缩小：--u 就是「1 个设计单位」有多大 */
+  --widget-w: min(338px, calc(100vw - 56px));
+  --u: calc(var(--widget-w) / 338);
+  --widget-h: calc(var(--u) * 158);
+  --radius: calc(var(--u) * 22);
+
+  --green: #30d158;
+  --red: #ff453a;
+  --orange: #ff9f0a;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+          "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none; /* 禁止 iOS 橡皮筋回弹 */
+}
+
+body {
+  font-family: var(--font);
+  color: #fff;
+  background:
+    radial-gradient(120% 70% at 15% 0%, #d6d4b0 0%, transparent 60%),
+    radial-gradient(100% 80% at 100% 100%, #5e5d47 0%, transparent 70%),
+    #9b9978;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;          /* 禁止长按弹出菜单 */
+  -webkit-tap-highlight-color: transparent;
+}
+
+.home {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  padding: calc(env(safe-area-inset-top) + 80px) 16px calc(env(safe-area-inset-bottom) + 24px);
+}
+
+/* ================= 卡片叠放 ================= */
+.stack-area { position: relative; }
+
+.stack {
+  position: relative;
+  width: var(--widget-w);
+  height: var(--widget-h);
+  touch-action: none; /* 关键！告诉浏览器：这里的手指移动归我处理，不要滚动/缩放 */
+}
+.stack.is-dragging { cursor: grabbing; }
+
+.card {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+  /* 注意：卡片必须是不透明的！半透明会让下面那张卡透出来 */
+  background: var(--card-bg);
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.08);
+}
+
+.card--battery {
+  --card-bg: #34332b;
+  background: linear-gradient(180deg, #3b3a31 0%, #2f2e27 100%);
+}
+.card--clock {
+  --card-bg: #262628;
+  background: linear-gradient(180deg, #313133 0%, #1f1f21 100%);
+}
+
+/* 右侧的页码小圆点 */
+.dots {
+  position: absolute;
+  top: 50%;
+  right: calc(var(--u) * -14);
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  transition: background 0.25s;
+}
+.dots span.is-active { background: rgba(255, 255, 255, 0.95); }
+
+/* ================= 电池组件 ================= */
+.battery {
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: center;
+  padding: 0 calc(var(--u) * 12);
+}
+.battery__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 12);
+}
+.ring {
+  position: relative;
+  width: calc(var(--u) * 62);
+  height: calc(var(--u) * 62);
+}
+.ring__svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg); /* 圆环从 12 点方向开始画 */
+}
+.ring__svg circle { fill: none; stroke-width: 5.6; }
+.ring__track { stroke: rgba(255, 255, 255, 0.13); }
+.ring__progress { stroke-linecap: round; }
+.ring__icon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+.ring__icon svg { width: calc(var(--u) * 27); height: calc(var(--u) * 27); }
+.ring__bolt {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--u) * -6);
+  width: calc(var(--u) * 12);
+  height: calc(var(--u) * 16);
+  transform: translateX(-50%);
+  overflow: visible;
+}
+.battery__pct {
+  font-size: calc(var(--u) * 21);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+/* ================= 世界时钟组件 ================= */
+.clocks {
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  align-content: center;
+  padding: 0 calc(var(--u) * 10);
+}
+.clocks__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.18;
+}
+.clock {
+  width: calc(var(--u) * 68);
+  height: calc(var(--u) * 68);
+  margin-bottom: calc(var(--u) * 5);
+}
+.clock { overflow: visible; }
+.clock__face { fill: #fff; }
+.clock__numbers text {
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 500;
+  fill: #000;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+.clock__hour line { stroke: #000; stroke-width: 4.6; stroke-linecap: round; }
+.clock__minute line { stroke: #000; stroke-width: 3.2; stroke-linecap: round; }
+.clock__second line { stroke: var(--orange); stroke-width: 1.3; stroke-linecap: round; }
+.clocks__city { font-size: calc(var(--u) * 13.5); font-weight: 600; }
+.clocks__sub {
+  font-size: calc(var(--u) * 12.5);
+  color: rgba(235, 235, 245, 0.55);
+}
+
+/* ================= 翻角图层（由 peel.js 创建） ================= */
+.peel-under,
+.peel-flap-wrap,
+.peel-flap,
+.peel-flap__front,
+.peel-flap__paper {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* 投在下面卡片上的阴影：圆角要和卡片一致，否则角上会露出方形的黑边 */
+.peel-under {
+  z-index: 25;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* 翻页的投影。filter 加在「外层」，才能沿着内层 clip-path 裁出的形状投影 */
+.peel-flap-wrap {
+  z-index: 40;
+  filter: drop-shadow(0 calc(var(--u) * 6) calc(var(--u) * 9) rgba(0, 0, 0, 0.38));
+}
+.peel-flap {
+  border-radius: var(--radius);
+  overflow: hidden;
+  transform-origin: 0 0; /* 镜像矩阵以卡片左上角为原点计算，这里必须对齐 */
+}
+.peel-flap__front { filter: blur(1.2px); }
+.peel-flap__front > .card { position: absolute; inset: 0; }
+.peel-flap__paper { background: rgba(247, 247, 250, 0.84); }
+
+/* 光影渐变条：一端贴着折痕，一端伸向角尖（位置由 JS 每帧计算） */
+.peel-grad {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1200px;
+  height: 2400px;
+  transform-origin: 0 0;
+}
+
+/* ================= 调试层 ================= */
+.peel-debug {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  display: none;
+  font: 600 11px var(--font);
+}
+.show-debug .peel-debug { display: block; }
+.show-debug .card { outline: 1px dashed rgba(255, 255, 255, 0.5); }
+
+/* ================= 页面其它部分 ================= */
+.hint {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.82);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.debug-toggle {
+  margin-top: auto;
+  padding: 10px 18px;
+  font: 500 14px var(--font);
+  color: #fff;
+  background: rgba(0, 0, 0, 0.25);
+  border: 0;
+  border-radius: 999px;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
