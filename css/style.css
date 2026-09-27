@@ -1,11 +1,31 @@
-/* ================= 设计变量 ================= */
+/* ================= 设计变量 =================
+ * 数值出处（OFFICIAL = Apple 官方文件里直接读到的；MEASURED = 从 Apple 官方图片上量的；
+ * INFERRED = 推断的）：
+ *   · 尺寸：HIG「Widgets」尺寸表，393×852 的 iPhone：中号 338×158、小号 158×158（OFFICIAL）
+ *     https://developer.apple.com/design/human-interface-guidelines/widgets
+ *   · 圆角、边距、材质、名字标签：Apple「iOS 27 UI Kit」（Sketch / Figma 版）的
+ *     Home Screen Widget 组件，画在 402pt 宽的 iPhone 上：中号 349.67×164.33、小号 164.67×164.67，
+ *     圆角 28、Smooth Apple (60%) 连续圆角、内容边距参考线 18（OFFICIAL）
+ *     https://developer.apple.com/design/resources/
+ *   · 表盘、圆环、字号：从 Apple 支持文档里的主屏幕图片上量的（MEASURED）
+ *     https://support.apple.com/guide/iphone/add-edit-and-remove-widgets-iphb8f1bf206/ios
+ */
 :root {
-  /* iPhone 中号小组件的设计尺寸是 338 × 158（pt）。
-     屏幕窄的时候等比缩小：--u 就是「1 个设计单位」有多大 */
-  --widget-w: min(338px, calc(100vw - 56px));
-  --u: calc(var(--widget-w) / 338);
-  --widget-h: calc(var(--u) * 158);
-  --radius: calc(var(--u) * 22);
+  /* 中号小组件的宽度：393pt 宽的 iPhone 上正好 338（左右各留 27.5，和 HIG 一致）。
+     屏幕更窄时等比缩小 */
+  --widget-w: min(338px, calc(100vw - 55px));
+  /* --u = 设计稿里的「1pt」。设计稿画在 402pt 宽的 iPhone 上（中号宽 349.67），
+     iOS 在小一点的屏幕上会把内容整体缩小（HIG 原话），所以按宽度比例换算 */
+  --u: calc(var(--widget-w) / 349.67);
+  --widget-h: calc(var(--widget-w) * 158 / 338); /* 中号的高 = 小号的边长（HIG 尺寸表） */
+  --small-w: var(--widget-h);
+  --grid-gap: calc(var(--widget-w) * 22 / 338); /* 两个小号之间的缝：338 = 158 + 22 + 158 */
+  --radius: calc(var(--u) * 28); /* 圆角 28（设计稿）。形状是连续圆角，由 peel.js 按这个半径算出来 */
+  --row-gap: calc(var(--u) * 37); /* 上一排小组件底边到下一排顶边（MEASURED：Apple 主屏幕图） */
+  --name-gap: calc(var(--u) * 6); /* 小组件底边到名字（设计稿：名字在底边下 6pt） */
+  --name-h: calc(var(--u) * 14); /* 名字一行高 14（设计稿：12pt / 行高 14） */
+  /* 整个小组件区域的高度：调参面板（手机上）要停在它下面 */
+  --screen-h: calc(var(--widget-h) + var(--row-gap) + var(--small-w) + var(--name-gap) + var(--name-h));
 
   --green: #30d158;
   --red: #ff453a;
@@ -31,7 +51,15 @@ html, body {
 
 /* 壁纸的底色。html 也要涂上：万一哪里没盖到，露出来的也是同一个颜色，而不是一条色带 */
 html { background: var(--wallpaper); }
-:root { --wallpaper: #9b9978; }
+:root {
+  --wallpaper: #9b9978;
+  /* 壁纸上的光影。单独写成变量，因为电池组件的「玻璃」里要再画一份（见 .card--battery） */
+  --wallpaper-light:
+    /* 左上角的亮光 */
+    radial-gradient(120% 70% at 15% 0%, rgba(214, 212, 176, 1) 0%, rgba(214, 212, 176, 0) 60%),
+    /* 右下角轻轻压暗一点：以前这里是很深的颜色，在手机上看像一块黑斑，现在淡很多、铺得更开 */
+    radial-gradient(130% 70% at 100% 100%, rgba(120, 118, 90, 0.45) 0%, rgba(120, 118, 90, 0) 75%);
+}
 
 body {
   font-family: var(--font);
@@ -60,12 +88,8 @@ body::before {
   height: calc(100vh + env(safe-area-inset-bottom) + 40px); /* 老浏览器用这个 */
   height: calc(100lvh + env(safe-area-inset-bottom) + 40px);
   pointer-events: none;
-  background:
-    /* 左上角的亮光 */
-    radial-gradient(120% 70% at 15% 0%, rgba(214, 212, 176, 1) 0%, rgba(214, 212, 176, 0) 60%),
-    /* 右下角轻轻压暗一点：以前这里是很深的颜色，在手机上看像一块黑斑，现在淡很多、铺得更开 */
-    radial-gradient(130% 70% at 100% 100%, rgba(120, 118, 90, 0.45) 0%, rgba(120, 118, 90, 0) 75%),
-    var(--wallpaper);
+  background-color: var(--wallpaper);
+  background-image: var(--wallpaper-light);
   background-repeat: no-repeat;
 }
 
@@ -79,6 +103,39 @@ body::before {
   padding: calc(env(safe-area-inset-top) + 80px) 16px calc(env(safe-area-inset-bottom) + 24px);
 }
 
+/* ================= 主屏幕排版 =================
+ * 上面一个中号，下面一行两个小号，像 iPhone 主屏幕的格子。
+ * 两排之间：上一排底边 → 名字（6）→ 名字一行（14）→ 空隙 → 下一排顶边，合起来 37（--row-gap） */
+.screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--row-gap) - var(--name-gap) - var(--name-h));
+  width: var(--widget-w);
+}
+.widget {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--name-gap);
+}
+.widget-row {
+  display: flex;
+  gap: var(--grid-gap);
+}
+/* 小组件下面的名字：SF Pro Medium 12pt、行高 14、白字、下面一圈很散的黑色投影（设计稿，OFFICIAL） */
+.widget__name {
+  margin: 0;
+  height: var(--name-h);
+  font-size: calc(var(--u) * 12);
+  line-height: var(--name-h);
+  font-weight: 510;
+  color: #fff;
+  text-align: center;
+  text-shadow: 0 2px 25px #000;
+  white-space: nowrap;
+}
+
 /* ================= 卡片叠放 ================= */
 .stack-area { position: relative; }
 
@@ -88,25 +145,67 @@ body::before {
   height: var(--widget-h);
   touch-action: none; /* 关键！告诉浏览器：这里的手指移动归我处理，不要滚动/缩放 */
 }
+.stack--small {
+  width: var(--small-w);
+  height: var(--small-w);
+}
 .stack.is-dragging { cursor: grabbing; }
 
 .card {
   position: absolute;
   inset: 0;
+  /* 这个圆角只是「JS 还没跑」时的后备，也是 peel.js 读半径的地方。
+     真正的形状是 peel.js 设的 clip-path：iOS 的连续圆角（比普通圆角更柔和） */
   border-radius: var(--radius);
   overflow: hidden;
+  isolation: isolate; /* 玻璃高光只和这张卡自己的底色混合，不和下面那张卡混 */
   /* 注意：卡片必须是不透明的！半透明会让下面那张卡透出来 */
   background: var(--card-bg);
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.08);
 }
+/*
+ * 小组件的「玻璃」层。Apple 设计稿里每个小组件都叠着一层「Widget Glass」图层样式（Liquid Glass）：
+ *   · 从下到上 黑 → #171717 的渐变，混合模式 Plus Lighter（只会提亮）：上面亮一点，下面不变
+ *   · 6 道内阴影，也是 Plus Lighter：上下边缘各一条柔和的亮带 + 1px 亮线 + 0.5px 的细高光
+ * 数值照抄设计稿（OFFICIAL）。设计稿这一层还有 3px 的高斯模糊；这里没用 filter（掀角时每帧重画太费），
+ * 改成把内阴影本身放软一点（INFERRED 的近似）
+ */
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(0deg, #000 0%, #171717 100%);
+  box-shadow:
+    inset 0 20px 12px -20px #222,
+    inset 0 -20px 12px -20px #222,
+    inset 0 1px 1.5px 0 #1a1a1a,
+    inset 0 -1px 1.5px 0 #1a1a1a,
+    inset 0 4px 1.5px -4px #666,
+    inset 0 -4px 1.5px -4px #666;
+  mix-blend-mode: screen; /* 不认识 plus-lighter 的老浏览器用这个：暗色上 screen ≈ 相加 */
+  mix-blend-mode: plus-lighter;
+}
+.card > * { position: relative; } /* 内容画在玻璃层上面 */
 
+/* 世界时钟：深色底 #1C1C1E。MEASURED：Apple 图里时钟小组件底部是 (28,28,30)、顶部是 (51,51,53)，
+   正好等于 #1C1C1E 再加上玻璃层的 #171717 —— 和设计稿对得上 */
+.card--clock { --card-bg: #1c1c1e; }
+
+/*
+ * 电池：玻璃材质（MEASURED：Apple 图里电池小组件透出后面的壁纸，不是纯色底）。
+ * 卡片必须不透明（掀角时不能透出下面那张卡），所以是「假玻璃」：
+ * 在卡片里再画一份壁纸，位置和屏幕对齐（main.js 算好 --wp-x / --wp-y），再压一层暗色让白字看得清。
+ * 壁纸是很柔的渐变，所以不用再模糊
+ */
+:root { --glass-tint: rgba(38, 36, 24, 0.36); }
 .card--battery {
-  --card-bg: #34332b;
-  background: linear-gradient(180deg, #3b3a31 0%, #2f2e27 100%);
-}
-.card--clock {
-  --card-bg: #262628;
-  background: linear-gradient(180deg, #313133 0%, #1f1f21 100%);
+  --card-bg: #6b6951; /* 没有壁纸位置信息时的后备色 */
+  background-color: var(--wallpaper);
+  background-image: linear-gradient(var(--glass-tint), var(--glass-tint)), var(--wallpaper-light);
+  background-size: 100% 100%, var(--wp-w, 100vw) var(--wp-h, 100vh), var(--wp-w, 100vw) var(--wp-h, 100vh);
+  background-position: 0 0, var(--wp-x, 0px) var(--wp-y, 0px), var(--wp-x, 0px) var(--wp-y, 0px);
+  background-repeat: no-repeat;
 }
 
 /* 右侧的页码小圆点 */
@@ -129,31 +228,34 @@ body::before {
 .dots span.is-active { background: rgba(255, 255, 255, 0.95); }
 
 /* ================= 电池组件 ================= */
+/* 中号：4 个圆环一行。左右边距 18（设计稿的内容边距参考线） */
 .battery {
   height: 100%;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   align-items: center;
-  padding: 0 calc(var(--u) * 12);
+  padding: 0 calc(var(--u) * 18);
 }
 .battery__item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: calc(var(--u) * 12);
+  gap: calc(var(--u) * 11);
 }
+/* 圆环外径 64（MEASURED：Apple 图里电池小组件的圆环 ≈ 64pt，线宽 ≈ 6.2pt） */
 .ring {
   position: relative;
-  width: calc(var(--u) * 62);
-  height: calc(var(--u) * 62);
+  width: calc(var(--u) * 64);
+  height: calc(var(--u) * 64);
 }
 .ring__svg {
+  display: block;
   width: 100%;
   height: 100%;
-  transform: rotate(-90deg); /* 圆环从 12 点方向开始画 */
+  overflow: visible; /* 充电闪电会伸出圆环上沿 */
 }
-.ring__svg circle { fill: none; stroke-width: 5.6; }
-.ring__track { stroke: rgba(255, 255, 255, 0.13); }
+.ring__svg circle { fill: none; stroke-width: 6.2; }
+.ring__track { stroke: rgba(255, 255, 255, 0.16); }
 .ring__progress { stroke-linecap: round; }
 .ring__icon {
   position: absolute;
@@ -162,59 +264,91 @@ body::before {
   place-items: center;
   color: #fff;
 }
-.ring__icon svg { width: calc(var(--u) * 27); height: calc(var(--u) * 27); }
-.ring__bolt {
-  position: absolute;
-  left: 50%;
-  top: calc(var(--u) * -6);
-  width: calc(var(--u) * 12);
-  height: calc(var(--u) * 16);
-  transform: translateX(-50%);
-  overflow: visible;
-}
+.ring__icon svg { width: calc(var(--u) * 28); height: calc(var(--u) * 28); }
 .battery__pct {
   font-size: calc(var(--u) * 21);
   font-weight: 500;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
 }
+/* 小号：4 个圆环排成 2×2，不写百分比（INFERRED：凭 iOS 的样子，Apple 图里没有这个状态） */
+.battery--small {
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  justify-items: center;
+  align-content: center;
+  row-gap: calc(var(--u) * 12);
+  padding: calc(var(--u) * 16);
+}
+.battery--small .ring { width: calc(var(--u) * 56); height: calc(var(--u) * 56); }
+.battery--small .ring__icon svg { width: calc(var(--u) * 25); height: calc(var(--u) * 25); }
 
 /* ================= 世界时钟组件 ================= */
+/* 中号：4 个表盘，第一个离左边 18、最后一个离右边 18，中间平均分（MEASURED：Apple 图） */
 .clocks {
   height: 100%;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, auto);
+  justify-content: space-between;
   align-content: center;
-  padding: 0 calc(var(--u) * 10);
+  padding: 0 calc(var(--u) * 18);
 }
 .clocks__item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  line-height: 1.18;
+  line-height: calc(var(--u) * 12.5);
+  white-space: nowrap;
 }
+/* 表盘直径 72（MEASURED） */
 .clock {
-  width: calc(var(--u) * 68);
-  height: calc(var(--u) * 68);
-  margin-bottom: calc(var(--u) * 5);
+  width: calc(var(--u) * 72);
+  height: calc(var(--u) * 72);
+  margin-bottom: calc(var(--u) * 4);
+  overflow: visible;
 }
-.clock { overflow: visible; }
+/* 表盘颜色：白天白底黑字；夜里深灰底 (54,54,56) 白字（MEASURED：Apple 图里东京、悉尼是深色表盘） */
 .clock__face { fill: #fff; }
 .clock__numbers text {
   font-family: var(--font);
-  font-size: 14px;
+  font-size: 16px; /* 表盘格子是 100 宽，这里的 px 就是格子单位：数字高约为直径的 12%（MEASURED） */
   font-weight: 500;
   fill: #000;
   text-anchor: middle;
   dominant-baseline: central;
 }
-.clock__hour line { stroke: #000; stroke-width: 4.6; stroke-linecap: round; }
-.clock__minute line { stroke: #000; stroke-width: 3.2; stroke-linecap: round; }
-.clock__second line { stroke: var(--orange); stroke-width: 1.3; stroke-linecap: round; }
-.clocks__city { font-size: calc(var(--u) * 13.5); font-weight: 600; }
+.clock__hour line,
+.clock__minute line { stroke: #000; stroke-width: 3.3; stroke-linecap: round; }
+.clock line.clock__neck { stroke-width: 1.6; } /* 靠近圆心那一小段是细的 */
+.clock__second line { stroke: var(--orange); stroke-width: 1.1; stroke-linecap: round; }
+.clock__pin { fill: #fff; stroke: var(--orange); stroke-width: 1.3; } /* 圆心的橙色小圈 */
+.is-night .clock__face { fill: #363638; }
+.is-night .clock__numbers text { fill: #fff; }
+.is-night .clock__hour line,
+.is-night .clock__minute line { stroke: #fff; }
+.is-night .clock__pin { fill: #363638; }
+/* 城市 11.5 半粗白字；今天 / 时差 11.5 灰字 = iOS 的 secondaryLabel（MEASURED：(156,156,161)） */
+.clocks__city { font-size: calc(var(--u) * 11.5); font-weight: 600; }
 .clocks__sub {
-  font-size: calc(var(--u) * 12.5);
-  color: rgba(235, 235, 245, 0.55);
+  font-size: calc(var(--u) * 11.5);
+  color: rgba(235, 235, 245, 0.6);
+}
+/* 小号：一个大表盘，城市名写在表盘里（INFERRED：凭 iOS「城市」时钟小组件的样子） */
+.clocks--small {
+  grid-template-columns: auto;
+  justify-content: center;
+  padding: 0;
+}
+.clocks--small .clock { width: calc(var(--u) * 140); height: calc(var(--u) * 140); margin: 0; }
+.clocks--small .clock__numbers text { font-size: 13px; } /* 大表盘上数字相对小一些，不挤 */
+.clock__label {
+  font-family: var(--font);
+  font-size: 9px;
+  font-weight: 600;
+  fill: #8e8e93;
+  text-anchor: middle;
+  dominant-baseline: central;
 }
 
 /* ================= 翻角图层（由 peel.js 创建） ================= */
@@ -229,10 +363,9 @@ body::before {
   pointer-events: none;
 }
 
-/* 投在下面卡片上的阴影：圆角要和卡片一致，否则角上会露出方形的黑边 */
+/* 投在下面卡片上的阴影：形状由 peel.js 用卡片的连续圆角轮廓裁出来，角上不会露出方形的黑边 */
 .peel-under {
   z-index: 25;
-  border-radius: var(--radius);
   overflow: hidden;
 }
 
@@ -248,8 +381,7 @@ body::before {
 
 .peel-flap-wrap { z-index: 40; }
 .peel-flap {
-  border-radius: var(--radius);
-  overflow: hidden;
+  overflow: hidden; /* 形状（连续圆角 + 折痕）由 peel.js 的 clip-path 决定 */
   transform-origin: 0 0; /* 镜像矩阵以卡片左上角为原点计算，这里必须对齐 */
   /* 单独一层：每帧只改变换和裁剪形状，手机上交给显卡去挪，不用重画里面的内容 */
   will-change: transform;
@@ -329,8 +461,8 @@ body::before {
   left: 0;
   right: 0;
   bottom: 0;
-  /* 面板顶边 = 小组件底边再往下 36px（和 .home 的上边距对应） */
-  top: calc(env(safe-area-inset-top) + 80px + var(--widget-h) + 36px);
+  /* 面板顶边 = 最下面一排小组件的名字再往下 16px（80px 和 .home 的上边距对应） */
+  top: calc(env(safe-area-inset-top) + 80px + var(--screen-h) + 16px);
   display: flex;
   flex-direction: column;
   max-width: 560px;

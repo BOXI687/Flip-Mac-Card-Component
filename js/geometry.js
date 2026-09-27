@@ -31,6 +31,74 @@ window.Geometry = (function () {
     return [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }];
   }
 
+  /**
+   * iOS 的「连续圆角」（squircle）轮廓，顺时针一圈点。
+   *   普通 border-radius：直边在某一点突然接上一段圆弧，曲率一下子从 0 跳到 1/r，看着有点「硬」。
+   *   连续圆角：直边先用一段贝塞尔曲线慢慢弯进来，中间才是一小段圆弧，所以拐角更柔和。
+   *   Apple 设计稿（iOS 27 UI Kit，Sketch 版）里小组件的圆角写的就是
+   *   「Radius 28，Style: Smooth Apple (60%)」—— smoothing 就是这里的 0.6。
+   * 算法和 Figma 的 corner smoothing 一样（每个角：贝塞尔 + 圆弧 + 贝塞尔），
+   * 再把曲线采样成点，好喂给 clipHalfPlane 和 CSS 的 polygon()。
+   * 形状是凸的，所以用直线切它（clipHalfPlane）结果依然正确。
+   */
+  function squirclePolygon(w, h, r, smoothing = 0.6, steps = 8) {
+    const budget = Math.min(w, h) / 2;
+    r = Math.min(r, budget);
+    if (r <= 0) return rectPolygon(w, h);
+    // 以下是 Figma 的做法：p = 圆角从直边开始「弯」的长度，超出一半边长就压缩平滑度
+    let s = smoothing;
+    let p = (1 + s) * r;
+    if (p > budget) {
+      s = Math.max(0, Math.min(s, budget / r - 1));
+      p = Math.min(p, budget);
+    }
+    const rad = Math.PI / 180;
+    const arcMeasure = 90 * (1 - s); // 中间那段真正圆弧的角度
+    const arcLen = Math.sin((arcMeasure / 2) * rad) * r * Math.SQRT2; // 圆弧两端点在 x、y 上各差多少
+    const alpha = (90 - arcMeasure) / 2;
+    const p3p4 = r * Math.tan((alpha / 2) * rad);
+    const beta = 45 * s;
+    const c = p3p4 * Math.cos(beta * rad);
+    const d = c * Math.tan(beta * rad);
+    const b = (p - arcLen - c - d) / 3;
+    const a = 2 * b;
+
+    // 先算「右上角」这一个角：从 (-p, 0) 走到 (0, p)，坐标相对于角尖 (w, 0)
+    const quarter = [];
+    const bez = (P0, P1, P2, P3) => {
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const u = 1 - t;
+        quarter.push({
+          x: u * u * u * P0.x + 3 * u * u * t * P1.x + 3 * u * t * t * P2.x + t * t * t * P3.x,
+          y: u * u * u * P0.y + 3 * u * u * t * P1.y + 3 * u * t * t * P2.y + t * t * t * P3.y,
+        });
+      }
+    };
+    const S0 = { x: -p, y: 0 };
+    quarter.push(S0);
+    const S1 = { x: -p + a + b + c, y: d };
+    bez(S0, { x: -p + a, y: 0 }, { x: -p + a + b, y: 0 }, S1);
+    // 圆弧：圆心在 (-r, r)，从 S1 顺时针转到 S2
+    const S2 = { x: S1.x + arcLen, y: S1.y + arcLen };
+    const a0 = Math.atan2(S1.y - r, S1.x + r);
+    const a1 = Math.atan2(S2.y - r, S2.x + r);
+    const arcSteps = Math.max(2, Math.round(steps / 2));
+    for (let i = 1; i <= arcSteps; i++) {
+      const t = a0 + ((a1 - a0) * i) / arcSteps;
+      quarter.push({ x: -r + r * Math.cos(t), y: r + r * Math.sin(t) });
+    }
+    bez(S2, { x: S2.x + d, y: S2.y + c }, { x: S2.x + d, y: S2.y + b + c }, { x: 0, y: p });
+
+    // 其余三个角由右上角旋转 / 翻转得到（顺时针：右上 → 右下 → 左下 → 左上）
+    const out = [];
+    for (const q of quarter) out.push({ x: w + q.x, y: q.y });
+    for (const q of quarter) out.push({ x: w - q.y, y: h + q.x });
+    for (const q of quarter) out.push({ x: -q.x, y: h - q.y });
+    for (const q of quarter) out.push({ x: q.y, y: -q.x });
+    return out;
+  }
+
   /** 四个角，name 方便调试显示 */
   function corners(w, h) {
     return [
@@ -137,6 +205,6 @@ window.Geometry = (function () {
 
   return {
     sub, add, scale, dot, length, distance, normalize,
-    rectPolygon, corners, fold, clipHalfPlane, reflectionMatrix, reflectPoint, toClipPath, area,
+    rectPolygon, squirclePolygon, corners, fold, clipHalfPlane, reflectionMatrix, reflectPoint, toClipPath, area,
   };
 })();

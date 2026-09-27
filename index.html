@@ -21,13 +21,43 @@
 </head>
 <body>
   <main class="home">
-    <div class="stack-area">
-      <!-- 叠放的小组件：第一个 .card 在最上面 -->
-      <div class="stack" id="stack">
-        <section class="card card--battery" aria-label="电池"></section>
-        <section class="card card--clock" aria-label="世界时钟"></section>
+    <!-- 像 iPhone 主屏幕一样排版：上面一个中号小组件，下面一行两个小号小组件。
+         每一叠都能单独掀角；尺寸、间距见 style.css 顶部 -->
+    <div class="screen">
+      <div class="widget widget--medium">
+        <div class="stack-area">
+          <!-- 叠放的小组件：第一个 .card 在最上面 -->
+          <div class="stack" id="stack">
+            <section class="card card--battery" aria-label="电池"></section>
+            <section class="card card--clock" aria-label="世界时钟"></section>
+          </div>
+          <div class="dots" id="dots" aria-hidden="true"><span class="is-active"></span><span></span></div>
+        </div>
+        <!-- 主屏幕上小组件下面的名字（写的是 App 名，和 iOS 一样），显示的是最上面那张 -->
+        <p class="widget__name">电池</p>
       </div>
-      <div class="dots" id="dots" aria-hidden="true"><span class="is-active"></span><span></span></div>
+      <div class="widget-row">
+        <div class="widget widget--small">
+          <div class="stack-area">
+            <div class="stack stack--small" id="stackSmallA">
+              <section class="card card--battery" aria-label="电池"></section>
+              <section class="card card--clock" aria-label="世界时钟"></section>
+            </div>
+            <div class="dots" aria-hidden="true"><span class="is-active"></span><span></span></div>
+          </div>
+          <p class="widget__name">电池</p>
+        </div>
+        <div class="widget widget--small">
+          <div class="stack-area">
+            <div class="stack stack--small" id="stackSmallB">
+              <section class="card card--clock" aria-label="世界时钟"></section>
+              <section class="card card--battery" aria-label="电池"></section>
+            </div>
+            <div class="dots" aria-hidden="true"><span class="is-active"></span><span></span></div>
+          </div>
+          <p class="widget__name">时钟</p>
+        </div>
+      </div>
     </div>
 
     <p class="hint">按住卡片任意一角拖动，偷看下面那张<br>松手自动盖回</p>

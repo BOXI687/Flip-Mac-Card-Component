@@ -50,6 +50,9 @@ async function setup(browser, initScript, extra = {}) {
   const sheet = await page.evaluate(() => { const s = document.querySelector('.tn-sheet'); const r = s.getBoundingClientRect(); return { open: s.classList.contains('is-open'), top: r.top, bottom: r.bottom, w: r.width }; });
   check('panel opens', sheet.open);
   check('panel does not cover widget', sheet.top > R.b + 10, `sheet top ${sheet.top.toFixed(0)} > stack bottom ${R.b.toFixed(0)}`);
+  // 下面还有一排小号：面板要停在最下面那排的名字下面
+  const lowest = await page.evaluate(() => Math.max(...[...document.querySelectorAll('.stack, .widget__name')].map((e) => e.getBoundingClientRect().bottom)));
+  check('panel stops below the lowest widget (small row + names)', sheet.top >= lowest + 8, `sheet top ${sheet.top.toFixed(0)} vs lowest ${lowest.toFixed(0)}`);
   check('no horizontal overflow (panel open)', (await overflow()) === 0);
   await page.screenshot({ path: OUT + '02-panel-open.png' });
 
@@ -97,6 +100,9 @@ async function setup(browser, initScript, extra = {}) {
     const readout = await page.evaluate((label) => [...document.querySelectorAll('.tn-row')].find((r) => r.querySelector('.tn-label').textContent === label).querySelector('.tn-value').textContent, info.label);
     check(`slider ${info.label} (${key}) changes behaviour`, before !== after && pBefore !== pAfter, `${pBefore} -> ${pAfter}; ${String(before).slice(0, 40)} -> ${String(after).slice(0, 40)}; 读数 ${readout}`);
   }
+  // 面板改的参数对每一叠（中号 + 两个小号）都生效
+  const sameAll = await page.evaluate((keys) => peels.every((p) => keys.every((k) => p.params[k] === peel.params[k])), keys);
+  check('panel changes apply to every stack (medium + 2 small)', sameAll && (await page.evaluate(() => peels.length)) === 3);
   // 轻点轨道跳值
   const tapInfo = await page.evaluate(() => { const el = document.querySelector('.tn-slider'); el.scrollIntoView({ block: 'center' }); const r = el.querySelector('.tn-slider__track').getBoundingClientRect(); return { x: r.left + r.width * 0.5, y: r.top + 2 }; });
   await sleep(80);
@@ -145,7 +151,9 @@ async function setup(browser, initScript, extra = {}) {
   check('release after long drag springs back (returning)', (await page.evaluate(() => peel.state)) === 'returning');
   await sleep(1500);
   const afterLong = await page.evaluate(() => [peel.state, peel.top.className, peel.top.style.clipPath]);
-  check('long drag does NOT change top card', afterLong[0] === 'idle' && afterLong[1] === topBefore && afterLong[2] === '', afterLong.join(' | '));
+  // 卡片平躺时的 clip-path 是整张连续圆角轮廓（以前是空字符串），和下面那张卡的一样
+  const restClip = await page.evaluate(() => peel.cards[1].style.clipPath);
+  check('long drag does NOT change top card', afterLong[0] === 'idle' && afterLong[1] === topBefore && afterLong[2] === restClip && restClip.startsWith('polygon'), afterLong.slice(0, 2).join(' | '));
   // 快速甩
   await drag(br, { x: R.l + 20, y: R.t + 10 }, 4, 8);
   await sleep(30);
@@ -248,6 +256,35 @@ async function setup(browser, initScript, extra = {}) {
   await page.screenshot({ path: OUT + '10-mid-peel.png' });
   await t('touchEnd'); await sleep(1400);
   check('no horizontal overflow (end)', (await overflow()) === 0);
+
+  // ---- 小号的两叠：每一叠的四个角都能掀，松手都盖回、不换卡，互不影响 ----
+  const layout = await page.evaluate(() => {
+    const box = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
+    return { m: box(document.getElementById('stack')), a: box(document.getElementById('stackSmallA')), b: box(document.getElementById('stackSmallB')) };
+  });
+  const near = (a, b) => Math.abs(a - b) < 0.6;
+  check('home grid: medium 338x158, smalls 158x158, gap 22, rows aligned (HIG 393pt)',
+    near(layout.m.w, 338) && near(layout.m.h, 158) && near(layout.a.w, 158) && near(layout.a.h, 158) && near(layout.b.w, 158)
+    && near(layout.b.l - layout.a.r, 22) && near(layout.a.l, layout.m.l) && near(layout.b.r, layout.m.r) && near(layout.a.t, layout.b.t) && layout.a.t > layout.m.b + 30,
+    JSON.stringify(layout));
+  for (const [i, id] of [[1, 'stackSmallA'], [2, 'stackSmallB']]) {
+    const S = layout[i === 1 ? 'a' : 'b'];
+    const topCls = await page.evaluate((i) => peels[i].top.className, i);
+    for (const c of ['tl', 'tr', 'br', 'bl']) {
+      const from = { tl: { x: S.l + 6, y: S.t + 6 }, tr: { x: S.r - 6, y: S.t + 6 }, br: { x: S.r - 6, y: S.b - 6 }, bl: { x: S.l + 6, y: S.b - 6 } }[c];
+      await drag(from, { x: S.l + S.w * 0.5, y: S.t + S.h * 0.5 }, 10, 16, false);
+      await sleep(40);
+      const m = await page.evaluate((i) => { const p = peels[i]; const name = p.C && Geometry.corners(p.W, p.H).find((k) => k.x === p.C.x && k.y === p.C.y).name; return { s: p.state, name, flap: getComputedStyle(p.flapWrap).display, frac: p.liftedFraction(Geometry.fold(p.C, p.displayP())), medium: peel.state }; }, i);
+      await t('touchEnd');
+      await sleep(1300);
+      const e = await page.evaluate((i) => { const p = peels[i]; return { s: p.state, top: p.top.className, clip: p.top.style.clipPath === p.cards[1].style.clipPath }; }, i);
+      check(`small stack ${id}: ${c} corner peels and returns to idle`, m.s === 'dragging' && m.name === c && m.flap === 'block' && m.frac > 0.05 && m.medium === 'idle' && e.s === 'idle' && e.top === topCls && e.clip, JSON.stringify({ m, e }));
+    }
+  }
+  await drag({ x: layout.b.r - 6, y: layout.b.b - 6 }, { x: layout.b.l + layout.b.w * 0.45, y: layout.b.t + layout.b.h * 0.4 }, 10, 16, false);
+  await page.screenshot({ path: OUT + '11-small-peel.png' });
+  await t('touchEnd'); await sleep(1300);
+
 
   // ---- 保存 & 重新打开 ----
   await page.evaluate(() => { peel.setParams({ maxLift: 0.4, hintOnLoad: false }); localStorage.setItem(Tuner.STORE_KEY, JSON.stringify(peel.params)); });

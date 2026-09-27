@@ -27,6 +27,7 @@ window.PeelStack = (function () {
   }
   const SPRING_PEEK = spring(0.3, 0.9); // 轻点/提示时掀一下（固定，不开放调节）
   const PRESS_LIFT = 0.12; // 「按住翘一下」的基础幅度 = 卡片高度 × 这个比例（再乘面板里的倍数）
+  const CORNER_SMOOTHING = 0.6; // 连续圆角的平滑度：Apple 设计稿写的是「Smooth Apple (60%)」
 
   /*
    * ======== 可调参数的默认值（全部集中在这里） ========
@@ -130,6 +131,13 @@ window.PeelStack = (function () {
       const r = this.el.getBoundingClientRect();
       this.W = r.width;
       this.H = r.height;
+      // 卡片的真实轮廓：iOS 连续圆角（不是普通圆角）。半径从 CSS 的 border-radius 读，
+      // 设计数值只写在 style.css 一个地方。平躺的卡片、翻页、阴影都从这个轮廓切出来
+      const radius = parseFloat(getComputedStyle(this.cards[0]).borderTopLeftRadius) || 0;
+      this.shape = G.squirclePolygon(this.W, this.H, radius, CORNER_SMOOTHING);
+      this.shapeArea = G.area(this.shape);
+      this.restClip = G.toClipPath(this.shape);
+      this.cards.forEach((c) => c !== this.peelCard && this.applyClip(c, null));
       this.lastKey = null;
     }
 
@@ -280,8 +288,8 @@ window.PeelStack = (function () {
 
     /** 被掀起的部分占整张卡片面积的比例（0 ~ 1） */
     liftedFraction(f) {
-      const lifted = G.clipHalfPlane(G.rectPolygon(this.W, this.H), (X) => -f.dist(X));
-      return G.area(lifted) / (this.W * this.H);
+      const lifted = G.clipHalfPlane(this.shape, (X) => -f.dist(X));
+      return G.area(lifted) / this.shapeArea;
     }
 
     /** 弹回原位（弹簧参数现读，调参面板一改就生效） */
@@ -359,7 +367,11 @@ window.PeelStack = (function () {
       if (L <= 0.01) return this.P;
       const toCenter = G.normalize(G.sub({ x: this.W / 2, y: this.H / 2 }, this.C));
       const fade = Math.max(0, 1 - G.distance(this.P, this.C) / (this.H * PRESS_LIFT * this.params.pressLift * 2.5));
-      return G.add(this.P, G.scale(toCenter, L * fade));
+      // 连续圆角的角是「圆」进去的：从矩形的角尖到卡片真正的边缘还有十几 px 是空的。
+      // 折痕在 C→P 的一半处，所以多挪「两倍这段空白」，翘起来的那一截才从卡片真正的边缘算起，
+      // 不然按住时几乎看不见纸角翘起（按住多久、翘多少的手感不变）
+      const inset = Math.min(...this.shape.map((X) => G.dot(G.sub(X, this.C), toCenter)));
+      return G.add(this.P, G.scale(toCenter, (L + 2 * Math.max(0, inset) * (this.press || 0)) * fade));
     }
 
     /** 「翘一下」的动画：一个很快、带一点点弹性的小弹簧（约 0.2 秒） */
@@ -376,10 +388,7 @@ window.PeelStack = (function () {
     reset() {
       this.state = 'idle';
       this.bounceDir = null;
-      if (this.peelCard) {
-        this.peelCard.style.clipPath = '';
-        this.peelCard.style.webkitClipPath = '';
-      }
+      if (this.peelCard) this.applyClip(this.peelCard, null); // 盖回去：恢复完整的连续圆角轮廓
       this.peelCard = null;
       this.C = this.P = null;
       this.onSettle = null;
@@ -470,9 +479,9 @@ window.PeelStack = (function () {
       const W = this.W;
       const H = this.H;
       const p = this.params;
-      const rect = G.rectPolygon(W, H);
-      const kept = G.clipHalfPlane(rect, (X) => f.dist(X)); // 还平躺的部分
-      const lifted = G.clipHalfPlane(rect, (X) => -f.dist(X)); // 被掀起的部分
+      // 用卡片的真实轮廓（连续圆角）来切，而不是矩形：这样平躺的部分、翻页、影子的圆角都和卡片一致
+      const kept = G.clipHalfPlane(this.shape, (X) => f.dist(X)); // 还平躺的部分
+      const lifted = G.clipHalfPlane(this.shape, (X) => -f.dist(X)); // 被掀起的部分
 
       // 1) 顶层卡片：只显示平躺的部分
       this.applyClip(this.peelCard, kept);
@@ -548,8 +557,9 @@ window.PeelStack = (function () {
       this.drawDebug(f, kept, lifted);
     }
 
+    /** poly 为空 = 卡片完整平躺，显示整张连续圆角轮廓 */
     applyClip(card, poly) {
-      const v = poly ? G.toClipPath(poly) : '';
+      const v = poly ? G.toClipPath(poly) : this.restClip;
       card.style.clipPath = v;
       card.style.webkitClipPath = v;
     }

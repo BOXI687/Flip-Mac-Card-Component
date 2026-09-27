@@ -62,7 +62,10 @@ async function desktop(browser, w, h) {
   const dots = await rectOf(page, '#dots');
   const hint = await rectOf(page, '.hint');
   const btn = await rectOf(page, '#tunerOpen');
-  check(`${tag}: sidebar overlaps nothing (stack, dots, hint, 调参)`, ![st, dots, hint, btn].some((r) => overlap(r, sb)) && dots.r + 12 <= sb.l, `stack r ${st.r.toFixed(0)}, dots r ${dots.r.toFixed(0)}, sidebar l ${sb.l.toFixed(0)}`);
+  const smallA = await rectOf(page, '#stackSmallA');
+  const smallB = await rectOf(page, '#stackSmallB');
+  check(`${tag}: sidebar overlaps nothing (stack, small stacks, dots, hint, 调参)`, ![st, smallA, smallB, dots, hint, btn].some((r) => overlap(r, sb)) && dots.r + 12 <= sb.l, `stack r ${st.r.toFixed(0)}, dots r ${dots.r.toFixed(0)}, sidebar l ${sb.l.toFixed(0)}`);
+  check(`${tag}: everything fits on screen (调参 button bottom inside viewport)`, btn.b <= h && smallA.b < hint.t, `btn bottom ${btn.b.toFixed(0)}`);
   const pad = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.home')).paddingRight));
   const mid = (16 + (w - pad)) / 2;
   check(`${tag}: stack centred in remaining space`, Math.abs((st.l + st.r) / 2 - mid) < 1, `stack centre ${((st.l + st.r) / 2).toFixed(1)} vs region centre ${mid.toFixed(1)}`);
@@ -260,7 +263,10 @@ async function desktop(browser, w, h) {
     await page.tap('#tunerOpen'); await sleep(700);
     await page.screenshot({ path: `${OUT}phone-393x852-open.png` });
     const sh = await rectOf(page, '.tn-sheet');
-    check('phone: sheet geometry unchanged', Math.round(sh.t) === 274 && sh.l === 0 && sh.w === 393 && sh.b === 852, JSON.stringify(sh));
+    // 面板顶边以前是 274（中号卡片下面）；现在下面多了一排小号，停在最下面那排名字的下面：
+    // 80 + 158 + 37u + 158 + 6u + 14u + 16，u = 338 / 349.67
+    const lowest = await page.evaluate(() => Math.max(...[...document.querySelectorAll('.stack, .widget__name')].map((e) => e.getBoundingClientRect().bottom)));
+    check('phone: sheet geometry (stops below the small row)', Math.round(sh.t) === 467 && sh.t >= lowest + 8 && sh.l === 0 && sh.w === 393 && sh.b === 852, JSON.stringify(sh) + ` lowest ${lowest.toFixed(1)}`);
     check('phone: no errors', errs.length === 0, errs.join(' | '));
     await ctx.close();
   }

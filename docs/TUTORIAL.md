@@ -113,17 +113,19 @@ js/main.js          组装：填数据、启动交互、打开调参面板
 
 ### 3.1 尺寸：从 iOS 的设计规范出发
 
-iPhone 中号小组件的设计尺寸是 **338 × 158**，圆角大约 **22**。
-但不同 iPhone 屏幕宽度不同，所以我们定义了一个「设计单位」`--u`（`css/style.css` 开头）：
+393pt 宽的 iPhone 上，中号小组件是 **338 × 158**、小号是 **158 × 158**（Apple HIG 的尺寸表）。
+Apple 的 iOS 27 设计稿（UI Kit）画在 402pt 宽的 iPhone 上：中号 **349.67 × 164.33**，圆角 **28**，
+而且是**连续圆角**（Smooth Apple 60%，比普通 `border-radius` 更柔和，见 `js/geometry.js` 的 `squirclePolygon`）。
+所以我们定义了一个「设计单位」`--u` = 设计稿里的 1pt（`css/style.css` 开头）：
 
 ```css
---widget-w: min(338px, calc(100vw - 56px)); /* 最宽 338，屏幕窄就缩 */
---u: calc(var(--widget-w) / 338);            /* 1 个设计单位有多大 */
---widget-h: calc(var(--u) * 158);
---radius: calc(var(--u) * 22);
+--widget-w: min(338px, calc(100vw - 55px));  /* 最宽 338，屏幕窄就缩 */
+--u: calc(var(--widget-w) / 349.67);          /* 设计稿里的 1pt 在这块屏幕上有多大 */
+--widget-h: calc(var(--widget-w) * 158 / 338);
+--radius: calc(var(--u) * 28);
 ```
 
-之后所有尺寸都写成 `calc(var(--u) * 数字)`，这里的数字就是设计稿上的数值。整个组件会**等比缩放**，不会变形。
+之后所有尺寸都写成 `calc(var(--u) * 数字)`，这里的数字就是设计稿上的数值（每个数字的出处写在 CSS 注释里）。整个组件会**等比缩放**，不会变形。
 
 ### 3.2 卡片为什么必须「不透明」
 

@@ -385,13 +385,18 @@ window.Tuner = (function () {
   }
 
   // ================= 面板本体 =================
-  function attach(peel) {
+  /**
+   * peel：主要那一叠（中号），面板上的数值以它为准；
+   * others：其它叠（小号），同样的参数也同步给它们，一处调、处处生效
+   */
+  function attach(peel, others = []) {
     const defaults = window.PeelStack.DEFAULTS;
-    peel.setParams(loadSaved(defaults)); // 先把上次调的值装上，再做首次提示
+    const group = [peel, ...others];
+    const setAll = (patch) => group.forEach((s) => s.setParams(patch));
+    setAll(loadSaved(defaults)); // 先把上次调的值装上，再做首次提示
 
     const openBtn = document.getElementById('tunerOpen');
     const stack = peel.el;
-    const stackArea = stack.parentElement;
 
     const sheet = h('section', 'tn-sheet');
     sheet.setAttribute('role', 'dialog');
@@ -435,9 +440,9 @@ window.Tuner = (function () {
       get: (key) => (localCtl[key] ? localCtl[key].get(peel) : peel.params[key]),
       defaultOf: (key) => defaults[key],
       set(ctl, v) {
-        if (ctl.local) ctl.set(peel, v);
+        if (ctl.local) group.forEach((s) => ctl.set(s, v));
         else {
-          peel.setParams({ [ctl.key]: v });
+          setAll({ [ctl.key]: v });
           save(peel.params);
         }
         refresh(ctl.key);
@@ -505,7 +510,7 @@ window.Tuner = (function () {
       peel.peek(tryCorners[tryIndex++ % tryCorners.length]); // 每次换一个角
     });
     btn('恢复默认', '', () => {
-      peel.setParams(Object.assign({}, defaults)); // 辅助线不是参数，保持原样
+      setAll(Object.assign({}, defaults)); // 辅助线不是参数，保持原样
       save(peel.params);
       refreshAll();
       showToast('已恢复默认');
@@ -599,7 +604,7 @@ window.Tuner = (function () {
       document.body.classList.toggle('is-tuning', open);
       if (!open) manual.classList.remove('is-visible');
       if (remember && isWide()) saveSideOpen(open);
-      peel.measure(); // 内容区让位后卡片换了地方，量一下（动画结束后还会再量一次）
+      group.forEach((s) => s.measure()); // 内容区让位后卡片换了地方，量一下（动画结束后还会再量一次）
     }
     const isOpen = () => sheet.classList.contains('is-open');
 
@@ -633,7 +638,7 @@ window.Tuner = (function () {
     }
     // 内容区让位的动画结束后再量一次卡片：翻角的坐标换算以卡片的位置为准
     home.addEventListener('transitionend', (e) => {
-      if (e.target === home) peel.measure();
+      if (e.target === home) group.forEach((s) => s.measure());
     });
 
     // 「调参」按钮：宽屏上是开关（再点一下收起），手机上面板会盖住它，只管打开
@@ -646,7 +651,7 @@ window.Tuner = (function () {
       (e) => {
         if (!isOpen() || isWide()) return;
         const t = e.target;
-        if (sheet.contains(t) || stackArea.contains(t) || openBtn.contains(t)) return;
+        if (sheet.contains(t) || openBtn.contains(t) || group.some((s) => s.el.parentElement.contains(t))) return;
         setOpen(false, false);
       },
       true
