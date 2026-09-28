@@ -39,7 +39,9 @@ async function setup(browser, initScript, extra = {}) {
   await page.goto(URL);
 
   // ---- 首次提示 ----
-  await sleep(1150);
+  // 首次提示在组件装好后 900ms 掀一下。等它真的开始（以前固定等 1150ms：
+  // 页面 JS 执行得晚一点，就会在提示开始之前检查，误报）
+  await page.waitForFunction(() => window.peel && peel.state === 'returning', null, { timeout: 5000 }).catch(() => {});
   const peekState = await page.evaluate(() => [peel.state, getComputedStyle(peel.flapWrap).display]);
   check('hint peek runs on load', peekState[0] === 'returning' && peekState[1] === 'block', peekState.join(','));
   await sleep(1500);
@@ -86,6 +88,11 @@ async function setup(browser, initScript, extra = {}) {
     underShade: () => peel.params.underShade,
     swipeDamping: () => peel.params.swipeDamping,
     swipeResponse: () => peel.params.swipeResponse,
+    peekResponse: () => peel.params.peekResponse,
+    peekDamping: () => peel.params.peekDamping,
+    peekStagger: () => peel.params.peekStagger,
+    peekScale: () => peel.params.peekScale,
+    peekPull: () => peel.params.peekPull,
   };
   for (const key of keys) {
     const info = await page.evaluate((key) => {
@@ -127,10 +134,12 @@ async function setup(browser, initScript, extra = {}) {
   await page.screenshot({ path: OUT + '03-panel-appearance.png' });
 
   // 开关
-  await page.evaluate(() => document.querySelector('.tn-switch').scrollIntoView({ block: 'center' }));
-  const sws = await page.evaluate(() => [...document.querySelectorAll('.tn-switch')].map((s) => { const r = s.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
+  // 开关按名字找（「掀开时」那一节也有一个开关，顺序不能当依据）
+  const swAt = (label) => page.evaluate((label) => { const s = document.querySelector(`.tn-switch[aria-label="${label}"]`); s.scrollIntoView({ block: 'center' }); const r = s.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, label);
+  const sws = [await swAt('打开时自动提示')];
   await tap(sws[0].x, sws[0].y);
   check('hint-on-load switch toggles', (await page.evaluate(() => peel.params.hintOnLoad)) === false);
+  sws[1] = await swAt('几何辅助线');
   await tap(sws[1].x, sws[1].y);
   check('geometry overlay switch toggles', await page.evaluate(() => peel.debug && document.getElementById('stack').classList.contains('show-debug')));
   await page.screenshot({ path: OUT + '04-panel-other.png' });
@@ -224,7 +233,7 @@ async function setup(browser, initScript, extra = {}) {
   const toast = await page.evaluate(() => { const e = document.querySelector('.tn-toast'); return [e.textContent, e.classList.contains('is-visible')]; });
   const clip = await page.evaluate(() => navigator.clipboard.readText());
   let parsed = null; try { parsed = JSON.parse(clip); } catch (e) {}
-  check('复制参数 copies JSON + shows toast', toast[0] === '已复制' && toast[1] && parsed && parsed.returnDamping === 0.82 && Object.keys(parsed).length === 14 && !('debug' in parsed), clip);
+  check('复制参数 copies JSON + shows toast', toast[0] === '已复制' && toast[1] && parsed && parsed.returnDamping === 0.82 && Object.keys(parsed).length === 21 && !('debug' in parsed), clip);
   await page.screenshot({ path: OUT + '07-copied-toast.png' });
 
   // 剪贴板失败 → 手动复制框
@@ -422,7 +431,7 @@ async function setup(browser, initScript, extra = {}) {
     Object.defineProperty(window, 'localStorage', { get() { throw new Error('SecurityError: storage disabled'); } });
   });
   await s2.page.goto(URL);
-  await sleep(1200);
+  await s2.page.waitForFunction(() => window.peel && peel.state === 'returning', null, { timeout: 5000 }).catch(() => {});
   const ok2 = await s2.page.evaluate(() => [peel.state, !!document.querySelector('.tn-sheet')]);
   const b2 = await s2.page.evaluate(() => { const r = document.getElementById('tunerOpen').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
   await s2.tap(b2.x, b2.y); await sleep(600);

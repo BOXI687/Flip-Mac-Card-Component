@@ -32,6 +32,8 @@ export default function PeelStack({ id, dotsId, size, widgets, onEngine }) {
       // 按下的地方不是角落 → 交给上下滑；正在滑的时候角落也不能掀
       onOtherDown: (e) => swiper.onDown(e),
       isBusy: () => swiper.busy,
+      // 每个小组件自己写的「掀开就聚拢」说明（组件上的 .peek，按大小取 medium / small），没有就是 null
+      peekSpecs: widgets.map(({ Widget }) => (Widget.peek && Widget.peek[size]) || null),
     });
     swiper = new StackSwiper(peel, { onChange: setIndex });
     peel.swiper = swiper;

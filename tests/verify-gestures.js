@@ -92,7 +92,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
           if (kind === 'pause') await sleep(400);
           await t('touchEnd');
           if (kind === 'regrab') {
-            await sleep(70);
+            // 30ms（以前 70ms）：读纸角位置、再按下，这两次 CDP 往返本身就要几十毫秒。
+            // 最 Q 弹（0.35）时纸角 100ms 左右就回到原位了，按得太晚就不是「半路抓住」、会误报
+            await sleep(30);
             const tip = await page.evaluate((i) => { const p = peels[i]; const d = p.displayP(); const r = p.el.getBoundingClientRect(); return { x: r.left + d.x, y: r.top + d.y, s: p.state }; }, i);
             await t('touchStart', tip.x, tip.y);
             await moveTo(tip, { x: tip.x + (to.x - from.x) * 0.15, y: tip.y + (to.y - from.y) * 0.15 }, 4, 16);
@@ -160,19 +162,27 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
           await moveTo(c, { x: c.x, y: c.y + dir * 0.35 * pitch }, 4, 8);
           await t('touchEnd');
           await sleep(70);
-          const before = await page.evaluate((i) => ({ pos: peels[i].swiper.pos, s: peels[i].swiper.state }), i);
           await page.evaluate((i) => window.__watch(i), i);
+          // 按下那一刻在页面里记位置：引擎处理之前（捕获阶段）和之后（冒泡到 window）各记一次。
+          // 以前是测试脚本前后各读一次，两次读之间弹簧还在走（CDP 往返几十毫秒），机器慢时会误报
+          await page.evaluate((i) => {
+            const p = peels[i];
+            const cap = () => { window.__swBefore = { pos: p.swiper.pos, s: p.swiper.state }; };
+            const bub = () => { window.__swAfter = { pos: p.swiper.pos, s: p.swiper.state }; removeEventListener('pointerdown', cap, true); removeEventListener('pointerdown', bub); };
+            addEventListener('pointerdown', cap, true);
+            addEventListener('pointerdown', bub);
+          }, i);
           await t('touchStart', c.x, c.y);
-          const atGrab = await page.evaluate((i) => ({ pos: peels[i].swiper.pos, s: peels[i].swiper.state }), i);
+          const { before, atGrab } = await page.evaluate(() => ({ before: window.__swBefore, atGrab: window.__swAfter }));
           await moveTo(c, { x: c.x, y: c.y - dir * 0.9 * pitch }, 14, 20);
           await t('touchEnd');
           const idle = await waitIdle(i);
           const r = await stop();
           const end = await page.evaluate((i) => peels[i].index, i);
-          const jump = Math.abs(atGrab.pos - before.pos) * pitch; // 两次读之间弹簧还在走，允许一点点
+          const jump = Math.abs(atGrab.pos - before.pos) * pitch; // 同一个按下事件的前后：应当一点没动
           const jumps = r.pos.slice(1).map((v, k) => Math.abs(v - r.pos[k]) * pitch);
-          check(`swipe ${id} ${word} re-grab mid-snap damping ${damping}`, before.s === 'settling' && atGrab.s === 'dragging' && jump < 25 && Math.max(0, ...jumps) < 45 && idle && end === start,
-            `state ${before.s} -> ${atGrab.s}, moved ${jump.toFixed(1)}px between reads, back to ${end} (want ${start})`);
+          check(`swipe ${id} ${word} re-grab mid-snap damping ${damping}`, before.s === 'settling' && atGrab.s === 'dragging' && jump < 2 && Math.max(0, ...jumps) < 45 && idle && end === start,
+            `state ${before.s} -> ${atGrab.s}, moved ${jump.toFixed(1)}px at the press, back to ${end} (want ${start})`);
         }
       }
     }

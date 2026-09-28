@@ -146,9 +146,9 @@ function BehindCloud({ children }) {
   );
 }
 
-function WxIcon({ kind, className }) {
+function WxIcon({ kind, className, peek }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true" data-peek={peek}>
       {kind === 'sun' && <Sun />}
       {kind === 'cloudSun' && (
         <BehindCloud>
@@ -192,7 +192,7 @@ function Tag({ a, b }) {
 /** 「最高 31° 最低 20°」：「最高」「最低」两个字竖着叠起来，这是 iOS 中文版的样子 */
 function HighLow({ high, low }) {
   return (
-    <div className="wx__hl" aria-label={`最高 ${high}°，最低 ${low}°`}>
+    <div className="wx__hl" aria-label={`最高 ${high}°，最低 ${low}°`} data-peek="hl">
       <Tag a="最" b="高" />
       <span className="wx__hl-num">{high}°</span>
       <Tag a="最" b="低" />
@@ -210,7 +210,7 @@ export default function Weather({ size = 'medium', data }) {
   const cls = `wx wx--${size}${night ? ' wx--night' : ''}`;
 
   const city = (
-    <div className="wx__city">
+    <div className="wx__city" data-peek="city">
       {data.city}
       <LocationArrow />
     </div>
@@ -220,9 +220,9 @@ export default function Weather({ size = 'medium', data }) {
     return (
       <div className={cls}>
         {city}
-        <div className="wx__temp">{temp}°</div>
-        <WxIcon kind={sky} className="wx__icon" />
-        <div className="wx__cond">{SKY_TEXT[sky]}</div>
+        <div className="wx__temp" data-peek="temp">{temp}°</div>
+        <WxIcon kind={sky} className="wx__icon" peek="icon" />
+        <div className="wx__cond" data-peek="cond">{SKY_TEXT[sky]}</div>
         <HighLow high={data.high} low={data.low} />
       </div>
     );
@@ -233,15 +233,15 @@ export default function Weather({ size = 'medium', data }) {
       <div className="wx__top">
         <div className="wx__now">
           {city}
-          <div className="wx__temp">{temp}°</div>
+          <div className="wx__temp" data-peek="temp">{temp}°</div>
         </div>
         <div className="wx__today">
-          <WxIcon kind={sky} className="wx__icon" />
-          <div className="wx__cond">{SKY_TEXT[sky]}</div>
+          <WxIcon kind={sky} className="wx__icon" peek="icon" />
+          <div className="wx__cond" data-peek="cond">{SKY_TEXT[sky]}</div>
           <HighLow high={data.high} low={data.low} />
         </div>
       </div>
-      <div className="wx__hours">
+      <div className="wx__hours" data-peek="hours">
         {hourlyFrom(data, now).map((c) => (
           <div key={c.key} className="wx__hour">
             <div className="wx__time">{c.label}</div>
@@ -253,3 +253,26 @@ export default function Weather({ size = 'medium', data }) {
     </div>
   );
 }
+
+/*
+ * 掀开就聚拢（见 engine/reveal.js、CLAUDE.md）：掀起上面那张卡时，天气卡上的信息怎么挤进口子里。
+ *   上面 JSX 里带 data-peek="…" 的元素就是这里说的名字。
+ *   roll     哪个元素的数字会「里程表滚动」
+ *   layouts  A 换座位：口子从小到大依次用的座位表 —— 先只有温度 → 温度 + 图标 + 天气 → 再加最高/最低
+ *   magnet   B 磁铁：chain = 被吸过去后排成一串的顺序；weight = 重要程度（1 最重要，越重要越早被吸过来）；
+ *            不在 chain 里的元素（城市、逐小时预报）被推开一点、变淡
+ */
+const PEEK = {
+  roll: 'temp',
+  layouts: [
+    'temp',
+    // either：横排、竖排两种都算，哪种在当前的口子里放得更大就（渐渐）用哪种
+    { either: [{ row: ['temp', 'icon', 'cond'] }, { col: ['temp', { row: ['icon', 'cond'] }] }] },
+    { either: [{ col: [{ row: ['temp', 'icon', 'cond'] }, 'hl'] }, { col: ['temp', { row: ['icon', 'cond'] }, 'hl'] }] },
+  ],
+  magnet: {
+    chain: [{ row: ['icon', 'cond'] }, { key: 'temp', scale: 1.35 }, { key: 'hl', scale: 0.9 }],
+    weight: { temp: 1, icon: 0.72, cond: 0.72, hl: 0.4, city: 0.1, hours: 0 },
+  },
+};
+Weather.peek = { medium: PEEK, small: PEEK };

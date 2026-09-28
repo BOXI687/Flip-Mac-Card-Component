@@ -540,6 +540,45 @@ body::before {
 }
 .tn-switch[aria-checked="true"] { background: #30d158; }
 
+/* ---- 几选一（iOS 分段控件）：选中的那格是浅色底；默认的那格下面有个小点 ---- */
+.tn-seg {
+  display: flex;
+  gap: 2px;
+  margin-top: 10px;
+  padding: 2px;
+  border-radius: 10px;
+  background: rgba(118, 118, 128, 0.24);
+}
+.tn-seg__btn {
+  position: relative;
+  flex: 1;
+  min-height: 44px; /* 手指点得准 */
+  padding: 0 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tn-text2);
+  font: 500 14px var(--font);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.tn-seg__btn.is-selected {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 1px 1px rgba(0, 0, 0, 0.1);
+}
+.tn-seg__btn.is-default::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 5px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+}
+
 
 /* ---- 颜色色块 ---- */
 .tn-swatches {

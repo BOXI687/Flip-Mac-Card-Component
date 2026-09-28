@@ -468,3 +468,72 @@
   overflow: hidden;
 }
 .notes__list li + li { border-top: 0.5px solid rgba(60, 60, 67, 0.18); }
+
+/* ================= 掀开就聚拢（engine/reveal.js） =================
+ * 只在偷看时出现的元素（data-peek-only）：平时透明，放在它「出发」的地方。
+ * 掀角时 reveal.js 用 transform / opacity 把它请到口子里；盖回去后样式清掉，又变回透明。
+ * 这些元素的样子是 INFERRED（iOS 的小组件里没有「偷看」这回事）。 */
+[data-peek-only] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+}
+/* 世界时钟的数字时间：从表盘中心出发（中号表盘直径 72，中心在 36） */
+.clocks__item { position: relative; }
+.clocks__digital {
+  left: 0;
+  right: 0;
+  top: calc(var(--u) * 36 - 0.5em);
+  text-align: center;
+  font-size: calc(var(--u) * 24);
+  line-height: 1;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+/* 小号：表盘 140，数字时间大一点；城市名在它下面 */
+.clocks--small .clocks__digital { top: calc(var(--u) * 70 - 0.5em); font-size: calc(var(--u) * 30); }
+.clocks__peek-city {
+  left: 0;
+  right: 0;
+  top: calc(var(--u) * 92);
+  text-align: center;
+  font-size: calc(var(--u) * 13);
+  line-height: calc(var(--u) * 16);
+  font-weight: 600;
+  color: rgba(235, 235, 245, 0.6);
+}
+/* 小号电池平时不写百分比：偷看时的那一个从圆环中心出发 */
+.battery--small .battery__item { position: relative; }
+.battery__pct--peek {
+  left: 0;
+  right: 0;
+  top: calc(50% - 0.55em);
+  text-align: center;
+}
+
+/* 数字滚动（里程表）：盖在原来的字上面的一层，每个数字是一条 0~9,0 的竖带子，只露出一格 */
+.peek-roll {
+  position: absolute;
+  inset: 0;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.peek-roll__col {
+  position: relative;
+  display: inline-block;
+  clip-path: inset(0 -0.3em); /* 只裁上下，左右放宽：窄的数字（1）滚过宽的数字时不会被切掉 */
+}
+.peek-roll__ghost { visibility: hidden; } /* 撑出和真实数字一样的宽度 */
+.peek-roll__strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.peek-roll__strip > span { display: block; }

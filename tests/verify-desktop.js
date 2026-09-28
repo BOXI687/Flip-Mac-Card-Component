@@ -51,7 +51,9 @@ async function peelCorner(page, name, tag) {
   // 按下那一刻：鼠标在卡片坐标里离角尖多远（卡片在动时会比 5,5 远一些）
   const grab = Math.hypot(s.C.x - (s.down.cx - s.down.rl), s.C.y - (s.down.cy - s.down.rt));
   await page.mouse.up();
-  const ok = s.state === 'dragging' && s.c === name && s.clip === 'polygon' && Math.abs(off - grab) < 0.5 && grab < 50 && Math.abs(s.W - R2.w) < 0.5 && Math.abs(s.H - R2.h) < 0.5;
+  // grab 的上限 = 角落感应范围（卡片在滑动时，按下那一刻卡片可能已经挪开几十 px；只要还在感应范围里就该抓得住。
+  // 以前写死 50px，机器一忙、卡片多滑了一点就会误报）
+  const ok = s.state === 'dragging' && s.c === name && s.clip === 'polygon' && Math.abs(off - grab) < 0.5 && grab < s.H * 0.45 && Math.abs(s.W - R2.w) < 0.5 && Math.abs(s.H - R2.h) < 0.5;
   check(`${tag}: peel ${name} corner lines up`, ok, `state ${s.state}, corner ${s.c}, tip-vs-mouse ${off.toFixed(1)}px = grab offset ${grab.toFixed(1)}px, W ${s.W}/${R2.w}`);
   await sleep(1300);
 }
@@ -180,7 +182,7 @@ async function desktop(browser, w, h) {
     await page.evaluate(() => document.querySelector('.tn-swatch[aria-label="黑"]').scrollIntoView({ block: 'center' }));
     await page.click('.tn-swatch[aria-label="黑"]');
     check('sidebar: paper colour swatch applies', await page.evaluate(() => peel.params.paperColor === '#1c1c1e'));
-    const sws = await page.$$('.tn-switch');
+    const sws = [await page.$('.tn-switch[aria-label="打开时自动提示"]'), await page.$('.tn-switch[aria-label="几何辅助线"]')];
     await sws[0].scrollIntoViewIfNeeded(); await sws[0].click();
     check('sidebar: hint-on-load switch toggles', (await page.evaluate(() => peel.params.hintOnLoad)) === false);
     await sws[1].click();
@@ -204,7 +206,7 @@ async function desktop(browser, w, h) {
     const toast = await page.evaluate(() => { const e = document.querySelector('.tn-toast'); const r = e.getBoundingClientRect(); const s = document.querySelector('.tn-sheet').getBoundingClientRect(); return { text: e.textContent, vis: e.classList.contains('is-visible'), inside: r.left >= s.left && r.right <= s.right && r.bottom <= s.bottom }; });
     const clip = await page.evaluate(() => navigator.clipboard.readText());
     let parsed = null; try { parsed = JSON.parse(clip); } catch (e) {}
-    check('sidebar: 复制参数 copies JSON + toast inside sidebar', toast.text === '已复制' && toast.vis && toast.inside && parsed && Object.keys(parsed).length === 14, JSON.stringify(toast));
+    check('sidebar: 复制参数 copies JSON + toast inside sidebar', toast.text === '已复制' && toast.vis && toast.inside && parsed && Object.keys(parsed).length === 21, JSON.stringify(toast));
     await page.screenshot({ path: `${OUT}desktop-1280x720-toast.png` });
     await page.evaluate(() => { navigator.clipboard.writeText = () => Promise.reject(new Error('no')); document.execCommand = () => false; });
     await page.click('.tn-foot .tn-btn--primary'); await sleep(250);
@@ -299,8 +301,11 @@ async function desktop(browser, w, h) {
     const { ctx, page, errs } = await setup(browser, 1280, 720, () => {
       Object.defineProperty(window, 'localStorage', { get() { throw new Error('SecurityError: storage disabled'); } });
     });
-    await page.goto(URL); await sleep(1200);
-    const s = await page.evaluate(() => [peel.state, document.querySelector('.tn-sheet').classList.contains('is-open')]);
+    await page.goto(URL);
+    // 等首次提示真的开始掀（以前固定等 1200ms，机器一忙就会错过或还没开始）
+    const hinted = await page.waitForFunction(() => window.peel && peel.state === 'returning', null, { timeout: 5000 }).then(() => 'returning', () => 'never');
+    const s = await page.evaluate((h) => [h, document.querySelector('.tn-sheet').classList.contains('is-open')], hinted);
+    await sleep(1500);
     await page.click('.tn-close'); await sleep(600);
     const closed = !(await isOpen(page));
     await page.click('#tunerOpen'); await sleep(600);

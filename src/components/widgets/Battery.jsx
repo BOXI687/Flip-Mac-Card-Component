@@ -57,7 +57,12 @@ const RING_C = 2 * Math.PI * RING_R; // 周长，dasharray 要用
 const BOLT = 'M7 1 1.8 9h3.6L4.6 15 10.2 6.8H6.6z'; // 12x16 的格子
 const BOLT_AT = 'translate(26 -5.5)'; // 放到圆环顶上居中
 
-function BatteryRing({ device, withPct }) {
+/**
+ * hero：这是不是电量最低的那个设备。掀开上面那张卡时，它的圆环、图标、百分比会挤进口子里
+ *   （data-peek 标出来，说明写在文件最后的 Battery.peek）；别的设备整个标成 "rest"，只负责变淡。
+ *   小号平时不写百分比，但偷看时要看到数字，所以给它藏一个只在偷看时出现的百分比（data-peek-only）
+ */
+function BatteryRing({ device, withPct, hero }) {
   // 遮罩要有一个全页面唯一的名字（id）。不能几个圆环共用一个：浏览器只认页面里第一个同名的，
   // 要是第一个恰好在一张藏起来的卡片里，所有用它的圆环都会一起消失。useId() 给每个组件一个不重复的名字
   const notchId = useId();
@@ -65,9 +70,9 @@ function BatteryRing({ device, withPct }) {
   const offset = RING_C * (1 - device.level / 100);
   const color = device.level <= 20 ? 'var(--red)' : 'var(--green)';
   return (
-    <div className="battery__item">
+    <div className="battery__item" data-peek={hero ? undefined : 'rest'}>
       <div className="ring">
-        <svg className="ring__svg" viewBox="0 0 64 64" aria-hidden="true">
+        <svg className="ring__svg" viewBox="0 0 64 64" aria-hidden="true" data-peek={hero ? 'ring' : undefined}>
           {device.charging && (
             <defs>
               <mask id={notchId} maskUnits="userSpaceOnUse" x="-8" y="-8" width="80" height="80">
@@ -85,20 +90,45 @@ function BatteryRing({ device, withPct }) {
           </g>
           {device.charging && <path className="ring__bolt" d={BOLT} transform={BOLT_AT} fill={color} />}
         </svg>
-        <div className="ring__icon">{ICONS[device.icon]}</div>
+        <div className="ring__icon" data-peek={hero ? 'icon' : undefined}>{ICONS[device.icon]}</div>
       </div>
-      {withPct && <div className="battery__pct">{device.level}%</div>}
+      {withPct && <div className="battery__pct" data-peek={hero ? 'pct' : undefined}>{device.level}%</div>}
+      {!withPct && hero && (
+        <div className="battery__pct battery__pct--peek" data-peek="pct" data-peek-only aria-hidden="true">{device.level}%</div>
+      )}
     </div>
   );
 }
 
 export default function Battery({ size = 'medium', devices }) {
   const small = size === 'small';
+  const list = devices.slice(0, 4);
+  // 电量最低的那个（一样低就取前面那个）：偷看时最想知道的就是它
+  const lowest = list.reduce((best, d, i) => (d.level < list[best].level ? i : best), 0);
   return (
     <div className={`battery battery--${size}`}>
-      {devices.slice(0, 4).map((d) => (
-        <BatteryRing key={d.icon} device={d} withPct={!small} />
+      {list.map((d, i) => (
+        <BatteryRing key={d.icon} device={d} withPct={!small} hero={i === lowest} />
       ))}
     </div>
   );
 }
+
+/*
+ * 掀开就聚拢（见 engine/reveal.js、CLAUDE.md）：电量最低的设备挤进口子里。
+ *   A 换座位：口子小 → 图标 + 百分比；口子大 → 圆环（图标在圆环里）+ 百分比
+ *   B 磁铁：百分比最重要，图标、圆环跟着过来；其它设备让开变淡
+ */
+const PEEK = {
+  hero: 'pct', // 主角（不写的话 = 第一张座位表里的第一个元素）
+  roll: 'pct',
+  layouts: [
+    { either: [{ row: ['icon', 'pct'] }, { col: ['icon', 'pct'] }] },
+    { either: [{ row: [{ over: ['ring', 'icon'] }, 'pct'] }, { col: [{ over: ['ring', 'icon'] }, 'pct'] }] },
+  ],
+  magnet: {
+    chain: [{ key: 'pct', scale: 1.4 }, { over: [{ key: 'ring', scale: 0.7 }, { key: 'icon', scale: 0.7 }] }],
+    weight: { pct: 1, icon: 0.8, ring: 0.8, rest: 0 },
+  },
+};
+Battery.peek = { medium: PEEK, small: PEEK };

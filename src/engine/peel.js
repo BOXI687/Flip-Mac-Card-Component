@@ -22,6 +22,7 @@
  * 掀角时露出来的永远是「顺序里的下一张」（index + 1，到头了就绕回第一张）。
  */
 import * as G from './geometry.js';
+import { Reveal } from './reveal.js';
 
 // 弹簧参数（用「响应时间 + 阻尼比」来想，比直接调 k/c 直观）
 //   response：大约多久完成一次来回，越小越快
@@ -59,6 +60,14 @@ const DEFAULTS = {
   // ---- 上下滑切换（swipe.js 读取；放在这里是为了和上面的参数一起存、一起复制） ----
   swipeResponse: 0.42, // 切换到下一张用多久（秒），越小越快
   swipeDamping: 0.86, // 切换停下时的阻尼：1 = 不晃，越小越「弹」
+  // ---- 掀开时，下面那张卡的信息怎么动（reveal.js 读取） ----
+  peekStyle: 'a', // 'a' = 换座位，'b' = 磁铁吸过去，'off' = 不动
+  peekRoll: true, // 数字滚动：数字露出来时像里程表一样滚到真实数值
+  peekResponse: 0.34, // 信息跟上去用多久（秒），越小越紧跟
+  peekDamping: 0.88, // 信息停下时的阻尼：1 = 不晃，越小越「弹」（B 在这个基础上再软 0.3）
+  peekStagger: 40, // 出发间隔（毫秒）：后一个元素比前一个晚出发多久
+  peekScale: 1.5, // 放大倍数：主角在口子里最多放大到原来的几倍
+  peekPull: 1, // 吸力（只对 B）：越大，同样掀开一点，信息被吸过来得越早
 };
 
 export class PeelStack {
@@ -68,12 +77,16 @@ export class PeelStack {
    *   这样引擎往里面加元素、克隆卡片，都不会和 React 打架
    * options.onOtherDown(e)：按下的地方不是角落时调用（交给上下滑切换）
    * options.isBusy()：返回 true 时（比如卡片正在上下滑），角落也不能掀
+   * options.peekSpecs：每张卡片的「掀开就聚拢」说明（和卡片一一对应，没有的是 null），见 reveal.js
    */
   constructor(el, options = {}) {
     this.el = el;
     this.layersEl = options.layers || el;
     this.onOtherDown = options.onOtherDown || null;
     this.isBusy = options.isBusy || (() => false);
+    this.peekSpecs = options.peekSpecs || [];
+    this.reveal = new Reveal(this); // 掀开时让下面那张卡的信息聚拢到口子里
+    this.geom = null; // 最近一帧的折痕和露出来的形状（reveal 每帧要用）
     // 可调参数：先拷一份默认值，再用 options.params 覆盖（不直接改 DEFAULTS，这样随时能「恢复默认」）
     this.params = Object.assign({}, DEFAULTS, options.params);
     this.cards = Array.from(el.querySelectorAll(':scope > .card'));
@@ -110,6 +123,7 @@ export class PeelStack {
     cancelAnimationFrame(this.raf);
     this.raf = 0;
     this.listeners.forEach(([t, type, fn]) => t.removeEventListener(type, fn));
+    this.reveal.end();
     [this.underShade, this.shadowWrap, this.flapWrap, this.debugSvg].forEach((n) => n.remove());
     this.cards.forEach((c) => {
       c.style.clipPath = c.style.webkitClipPath = c.style.zIndex = c.style.visibility = '';
@@ -395,6 +409,10 @@ export class PeelStack {
     this.underShade.style.display = 'block';
     this.shadowWrap.style.display = 'block';
     this.lastKey = null;
+    this.geom = null;
+    // 下面那张卡：量好它上面信息的原位，准备聚拢（没有说明的小组件什么也不做）
+    const under = this.under;
+    this.reveal.begin(under, this.peekSpecs[this.cards.indexOf(under)]);
   }
 
   /** 轻轻掀起再放下（点角落 / 首次提示） */
@@ -460,6 +478,8 @@ export class PeelStack {
     this.peelCard = null;
     this.C = this.P = null;
     this.onSettle = null;
+    this.geom = null;
+    this.reveal.end(); // 盖回去了：下面那张卡上的信息全部回到原位（清掉所有变换）
     this.hideLayers();
     this.drawDebug(null);
   }
@@ -497,6 +517,8 @@ export class PeelStack {
       return;
     }
     this.render();
+    // 手指停住时 render 会跳过，但信息的弹簧还要继续追目标，所以每帧都走一步
+    this.reveal.step(now, this.geom);
     this.raf = requestAnimationFrame(this.loop);
   }
 
@@ -541,6 +563,7 @@ export class PeelStack {
       this.underShade.style.clipPath = this.underShade.style.webkitClipPath = none;
       this.shadowShape.style.clipPath = this.shadowShape.style.webkitClipPath = none;
       this.drawDebug(null);
+      this.geom = null;
       return;
     }
 
@@ -550,6 +573,8 @@ export class PeelStack {
     // 用卡片的真实轮廓（连续圆角）来切，而不是矩形：这样平躺的部分、翻页、影子的圆角都和卡片一致
     const kept = G.clipHalfPlane(this.shape, (X) => f.dist(X)); // 还平躺的部分
     const lifted = G.clipHalfPlane(this.shape, (X) => -f.dist(X)); // 被掀起的部分
+    // 被掀起的部分 = 下面那张卡露出来的部分（翻过去的纸落在平躺那一侧，不挡它）
+    this.geom = { f, lifted, frac: G.area(lifted) / this.shapeArea };
 
     // 1) 顶层卡片：只显示平躺的部分
     this.applyClip(this.peelCard, kept);

@@ -135,6 +135,60 @@ const SECTIONS = [
     ],
   },
   {
+    // 掀开一角时，下面那张卡上的信息怎么挤进口子里（engine/reveal.js）。
+    // 目前天气、电池、世界时钟支持；别的小组件不受影响
+    title: '掀开时，下面那张卡的信息',
+    items: [
+      {
+        key: 'peekStyle', label: '信息怎么动', type: 'choice',
+        hint: 'A：按座位表一个接一个坐进口子里，口子越大放得越多；B：像被磁铁吸过去，越重要吸得越近，会轻轻晃',
+        options: [
+          { value: 'a', name: 'A 换座位' },
+          { value: 'b', name: 'B 磁铁' },
+          { value: 'off', name: '关' },
+        ],
+      },
+      {
+        key: 'peekRoll', label: '数字滚动', type: 'switch',
+        hint: '数字露出来时像里程表一样从 0 滚到真实数值，盖回去时滚回去',
+      },
+      {
+        key: 'peekResponse', label: '跟随速度',
+        hint: '信息跟上纸角要多久，越短越紧跟手指',
+        min: 0.15, max: 0.7, step: 0.01, ends: ['紧跟', '慢悠悠'],
+        show: (v) => `${v.toFixed(2)} 秒`,
+      },
+      {
+        key: 'peekDamping', label: '跟随弹性',
+        hint: '信息停到位时会不会轻轻晃一下（B 本来就比 A 更晃）',
+        min: 0.5, max: 1, step: 0.01, invert: true, ends: ['干脆', 'Q 弹'],
+        show: (v) => {
+          const s = Math.round(((1 - v) / 0.5) * 100);
+          const word = s === 0 ? '不晃' : s < 30 ? '轻微' : s < 65 ? '明显' : '很弹';
+          return `${word} · ${s}%`;
+        },
+      },
+      {
+        key: 'peekStagger', label: '出发间隔',
+        hint: '后一个元素比前一个晚出发多久，像一个接一个入座',
+        min: 0, max: 120, step: 5, ends: ['一起出发', '一个接一个'],
+        show: (v) => (v === 0 ? '一起' : `${Math.round(v)} 毫秒`),
+      },
+      {
+        key: 'peekScale', label: '放大倍数',
+        hint: '最重要的那个数字在口子里最多放大到几倍（口子太小时会自动缩小，保证放得下）',
+        min: 1, max: 2.2, step: 0.05, ends: ['原大', '很大'],
+        show: (v) => `${v.toFixed(2)} 倍`,
+      },
+      {
+        key: 'peekPull', label: '吸力（B）',
+        hint: '只对 B：吸力越大，掀开一点点信息就被吸过来',
+        min: 0.5, max: 2, step: 0.05, ends: ['弱', '强'],
+        show: (v) => pct(v),
+      },
+    ],
+  },
+  {
     title: '其他',
     items: [
       {
@@ -178,6 +232,8 @@ function loadSaved(defaults) {
       out[ctl.key] = Math.min(ctl.max, Math.max(ctl.min, v));
     } else if (ctl.type === 'color') {
       if (/^#[0-9a-f]{6}$/i.test(v)) out[ctl.key] = v;
+    } else if (ctl.type === 'choice') {
+      if (ctl.options.some((o) => o.value === v)) out[ctl.key] = v;
     } else {
       out[ctl.key] = v;
     }
@@ -369,6 +425,35 @@ function buildSwitch(ctl, api) {
   };
 }
 
+/**
+ * 几选一（iOS 的分段控件 segmented control）：一排按钮，选中的那个是白底。
+ * 默认的那个选项下面有一个小点，调乱了也知道哪个是默认
+ */
+function buildChoice(ctl, api) {
+  const seg = h('div', 'tn-seg');
+  seg.setAttribute('role', 'radiogroup');
+  seg.setAttribute('aria-label', ctl.label);
+  const btns = ctl.options.map((o) => {
+    const b = h('button', 'tn-seg__btn', o.name);
+    b.type = 'button';
+    b.setAttribute('role', 'radio');
+    b.dataset.value = o.value;
+    if (o.value === api.defaultOf(ctl.key)) b.classList.add('is-default');
+    b.addEventListener('click', () => api.set(ctl, o.value));
+    seg.append(b);
+    return b;
+  });
+  ctl.show = (v) => (ctl.options.find((o) => o.value === v) || {}).name || '';
+  return {
+    nodes: [seg],
+    render: (v) => btns.forEach((b) => {
+      const on = b.dataset.value === v;
+      b.classList.toggle('is-selected', on);
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+    }),
+  };
+}
+
 /** 颜色：几个预设色块 + 一个「自定义」取色器 */
 function buildColor(ctl, api) {
   const row = h('div', 'tn-swatches');
@@ -494,7 +579,9 @@ function attach(peel, others = [], dom = {}) {
           ? buildSwitch(ctl, api)
           : ctl.type === 'color'
             ? buildColor(ctl, api)
-            : buildSlider(ctl, api);
+            : ctl.type === 'choice'
+              ? buildChoice(ctl, api)
+              : buildSlider(ctl, api);
       let value = null;
       if (built.head) rowHead.append(built.head);
       else {
@@ -538,6 +625,7 @@ function attach(peel, others = [], dom = {}) {
     if (peel.state !== 'idle' || peel.isBusy()) return;
     peel.peek(tryCorners[tryIndex++ % tryCorners.length]); // 每次换一个角
   });
+  // 注：「恢复默认」「复制参数」按 peel.params 的全部键来做，新加的「掀开时」那几项自动包含在内
   btn('恢复默认', '', () => {
     setAll(Object.assign({}, defaults)); // 辅助线不是参数，保持原样
     save(peel.params);
