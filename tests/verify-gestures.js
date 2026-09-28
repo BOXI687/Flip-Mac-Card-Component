@@ -31,9 +31,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await page.goto(URL);
   await sleep(600);
   const cdp = await ctx.newCDPSession(page);
-  const t = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
+  const t = (type, x, y, timestamp) => cdp.send('Input.dispatchTouchEvent', Object.assign({ type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] }, timestamp ? { timestamp } : {}));
   const moveTo = async (a, b, steps, delay) => {
     for (let i = 1; i <= steps; i++) { await t('touchMove', a.x + (b.x - a.x) * i / steps, a.y + (b.y - a.y) * i / steps); await sleep(delay); }
+  };
+  // 快甩要带上精确的时间戳：测试工具每发一次事件本身就要十几到几十毫秒，
+  // 不带时间戳的话，页面算出来的松手速度取决于机器快慢，短甩有时会被当成慢拖
+  const flick = async (a, b, steps, delay) => {
+    const t0 = Date.now() / 1000;
+    await t('touchStart', a.x, a.y, t0);
+    for (let i = 1; i <= steps; i++) await t('touchMove', a.x + (b.x - a.x) * i / steps, a.y + (b.y - a.y) * i / steps, t0 + (i * delay) / 1000);
+    return t0 + ((steps + 1) * delay) / 1000; // 松手的时间戳
   };
 
   // 页面里的记录器：松手那一刻（在引擎处理之前）记下掀起面积，之后每一帧记最大值；
@@ -123,11 +131,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
         for (const [name, amount, steps, delay, pause, change] of cases) {
           const start = await page.evaluate((i) => peels[i].index, i);
           await page.evaluate((i) => window.__watch(i), i);
-          await t('touchStart', c.x, c.y);
-          await moveTo(c, { x: c.x, y: c.y + dir * amount * pitch }, steps, delay);
+          const to = { x: c.x, y: c.y + dir * amount * pitch };
+          let upAt;
+          if (name.startsWith('flick')) upAt = await flick(c, to, steps, delay);
+          else {
+            await t('touchStart', c.x, c.y);
+            await moveTo(c, to, steps, delay);
+          }
           const during = await page.evaluate((i) => peels[i].swiper.pos, i);
           if (pause) await sleep(pause);
-          await t('touchEnd');
+          await t('touchEnd', 0, 0, upAt);
           const idle = await waitIdle(i);
           await sleep(40);
           const r = await stop();
