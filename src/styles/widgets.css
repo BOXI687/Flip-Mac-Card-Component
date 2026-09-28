@@ -1,0 +1,470 @@
+/* ================= 每个小组件的样子 =================
+ * 尺寸都用 --u 写：--u = 设计稿里的「1pt」，按屏幕宽度等比缩放（定义在 style.css 顶部）。
+ * 数值出处（和 style.css 一样标注）：OFFICIAL = Apple 官方文件里读到的；MEASURED = 从图片上量的；
+ * INFERRED = 推断的。电池、世界时钟量自 Apple 官方图；天气、日历、播客、健身、备忘录量自
+ * Boxi 提供的 iPhone 截图（截图本身不放进仓库）。
+ */
+
+/* ================= 电池组件 ================= */
+/* 中号：4 个圆环一行。左右边距 18（设计稿的内容边距参考线） */
+.battery {
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: center;
+  padding: 0 calc(var(--u) * 18);
+}
+.battery__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 11);
+}
+/* 圆环外径 64（MEASURED：Apple 图里电池小组件的圆环 ≈ 64pt，线宽 ≈ 6.2pt） */
+.ring {
+  position: relative;
+  width: calc(var(--u) * 64);
+  height: calc(var(--u) * 64);
+}
+.ring__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible; /* 充电闪电会伸出圆环上沿 */
+}
+.ring__svg circle { fill: none; stroke-width: 6.2; }
+.ring__track { stroke: rgba(255, 255, 255, 0.16); }
+.ring__progress { stroke-linecap: round; }
+.ring__icon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+.ring__icon svg { width: calc(var(--u) * 28); height: calc(var(--u) * 28); }
+.battery__pct {
+  font-size: calc(var(--u) * 21);
+  font-weight: 500;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+/* 小号：4 个圆环排成 2×2，不写百分比（INFERRED：凭 iOS 的样子，Apple 图里没有这个状态） */
+.battery--small {
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  justify-items: center;
+  align-content: center;
+  row-gap: calc(var(--u) * 12);
+  padding: calc(var(--u) * 16);
+}
+.battery--small .ring { width: calc(var(--u) * 56); height: calc(var(--u) * 56); }
+.battery--small .ring__icon svg { width: calc(var(--u) * 25); height: calc(var(--u) * 25); }
+
+/* ================= 世界时钟组件 ================= */
+/* 中号：4 个表盘，第一个离左边 18、最后一个离右边 18，中间平均分（MEASURED：Apple 图） */
+.clocks {
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  justify-content: space-between;
+  align-content: center;
+  padding: 0 calc(var(--u) * 18);
+}
+.clocks__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: calc(var(--u) * 12.5);
+  white-space: nowrap;
+}
+/* 表盘直径 72（MEASURED） */
+.clock {
+  width: calc(var(--u) * 72);
+  height: calc(var(--u) * 72);
+  margin-bottom: calc(var(--u) * 4);
+  overflow: visible;
+}
+/* 表盘颜色：白天白底黑字；夜里深灰底 (54,54,56) 白字（MEASURED：Apple 图里东京、悉尼是深色表盘） */
+.clock__face { fill: #fff; }
+.clock__numbers text {
+  font-family: var(--font);
+  font-size: 16px; /* 表盘格子是 100 宽，这里的 px 就是格子单位：数字高约为直径的 12%（MEASURED） */
+  font-weight: 500;
+  fill: #000;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+.clock__hour line,
+.clock__minute line { stroke: #000; stroke-width: 3.3; stroke-linecap: round; }
+.clock line.clock__neck { stroke-width: 1.6; } /* 靠近圆心那一小段是细的 */
+.clock__second line { stroke: var(--orange); stroke-width: 1.1; stroke-linecap: round; }
+.clock__pin { fill: #fff; stroke: var(--orange); stroke-width: 1.3; } /* 圆心的橙色小圈 */
+.is-night .clock__face { fill: #363638; }
+.is-night .clock__numbers text { fill: #fff; }
+.is-night .clock__hour line,
+.is-night .clock__minute line { stroke: #fff; }
+.is-night .clock__pin { fill: #363638; }
+/* 城市 11.5 半粗白字；今天 / 时差 11.5 灰字 = iOS 的 secondaryLabel（MEASURED：(156,156,161)） */
+.clocks__city { font-size: calc(var(--u) * 11.5); font-weight: 600; }
+.clocks__sub {
+  font-size: calc(var(--u) * 11.5);
+  color: rgba(235, 235, 245, 0.6);
+}
+/* 小号：一个大表盘，城市名写在表盘里（INFERRED：凭 iOS「城市」时钟小组件的样子） */
+.clocks--small {
+  grid-template-columns: auto;
+  justify-content: center;
+  padding: 0;
+}
+.clocks--small .clock { width: calc(var(--u) * 140); height: calc(var(--u) * 140); margin: 0; }
+.clocks--small .clock__numbers text { font-size: 13px; } /* 大表盘上数字相对小一些，不挤 */
+.clock__label {
+  font-family: var(--font);
+  font-size: 9px;
+  font-weight: 600;
+  fill: #8e8e93;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+
+/* ================= 天气 =================
+ * 数值出处：Boxi 的 iPhone 截图（MEASURED，iOS 26/27、深色壁纸）。截图里中号宽 810px，
+ * 除以 2.316 就换成设计稿的 pt（= 这里的 u）。背景渐变 = 截图里的颜色减去玻璃层提亮的那一点。
+ * 夜里的深蓝是凭印象配的（INFERRED：截图是白天拍的）。 */
+.card--weather {
+  background: linear-gradient(180deg, #0a4178 0%, #205589 26%, #336b9f 52%, #5a85b2 78%, #769ec3 100%);
+}
+.card--weather:has(.wx--night) {
+  background: linear-gradient(180deg, #050b1c 0%, #0f1d38 45%, #243a5e 100%);
+}
+.wx {
+  position: relative;
+  height: 100%;
+  padding: calc(var(--u) * 17.5) calc(var(--u) * 19) 0;
+  color: #fff;
+}
+.wx__top {
+  display: flex;
+  justify-content: space-between;
+}
+/* 城市：15 半粗，后面跟一个定位小箭头 */
+.wx__city {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 3.5);
+  font-size: calc(var(--u) * 15);
+  line-height: calc(var(--u) * 18);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.wx__loc { width: calc(var(--u) * 9.5); height: calc(var(--u) * 9.5); }
+/* 大温度：细体，数字高 32（≈ 字号 45） */
+.wx__temp {
+  margin-top: calc(var(--u) * 3.5);
+  font-size: calc(var(--u) * 45);
+  line-height: 1;
+  font-weight: 300;
+  letter-spacing: -0.01em;
+}
+/* 右上：图标 → 天气 → 最高 / 最低，全部靠右 */
+.wx__today {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.wx__icon { display: block; width: calc(var(--u) * 19); height: calc(var(--u) * 19); }
+.wx--medium .wx__icon { margin: calc(var(--u) * -1.1) calc(var(--u) * -2) 0 0; }
+.wx__cond {
+  font-size: calc(var(--u) * 13);
+  line-height: calc(var(--u) * 16);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.wx--medium .wx__cond { margin-top: calc(var(--u) * 3.6); }
+/* 最高 / 最低：两个小字竖着叠（字号 8.5），后面是细体的大数字（字号 25） */
+.wx__hl {
+  display: flex;
+  align-items: flex-end;
+  white-space: nowrap;
+}
+.wx--medium .wx__hl { margin-top: calc(var(--u) * -1.3); }
+.wx__hl-tag {
+  display: flex;
+  flex-direction: column;
+  margin: 0 calc(var(--u) * 1.6) calc(var(--u) * 1.6) 0;
+  font-size: calc(var(--u) * 8.6);
+  line-height: calc(var(--u) * 9);
+  font-weight: 500;
+}
+.wx__hl-tag i { font-style: normal; }
+.wx__hl-num {
+  font-size: calc(var(--u) * 25);
+  line-height: 1;
+  font-weight: 300;
+}
+.wx__hl-num + .wx__hl-tag { margin-left: calc(var(--u) * 5); }
+/* 逐小时预报：6 格等宽，左右贴着 19 的边距，格子中心间距 ≈ 57.5（MEASURED） */
+.wx__hours {
+  position: absolute;
+  left: calc(var(--u) * 19);
+  right: calc(var(--u) * 19);
+  top: calc(var(--u) * 93.6);
+  display: flex;
+  justify-content: space-between;
+}
+.wx__hour {
+  width: calc(var(--u) * 25);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  white-space: nowrap;
+}
+.wx__time {
+  font-size: calc(var(--u) * 11.5);
+  line-height: calc(var(--u) * 14);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.72);
+}
+.wx__hicon { display: block; width: calc(var(--u) * 21); height: calc(var(--u) * 21); margin-top: calc(var(--u) * 0.9); }
+.wx__htemp {
+  margin-top: calc(var(--u) * 7.1);
+  font-size: calc(var(--u) * 13.5);
+  line-height: calc(var(--u) * 14);
+  font-weight: 600;
+}
+/* 小号：从上往下一列 */
+.wx--small .wx__temp { margin-top: calc(var(--u) * 2.6); }
+.wx--small .wx__icon { margin: calc(var(--u) * -4.5) 0 0 calc(var(--u) * -1.9); }
+.wx--small .wx__cond { margin-top: calc(var(--u) * 2.8); }
+.wx--small .wx__hl { margin-top: calc(var(--u) * 6.4); }
+
+/* ================= 日历（小号） =================
+ * MEASURED（Boxi 的截图）：日期数字高 25（≈ 字号 35），农历和星期是 11 号字竖排，
+ * 中间两条细灰线；「今天无日程」15 号灰字。白底 */
+.card--calendar { --card-bg: #fff; }
+.cal {
+  position: relative;
+  height: 100%;
+  padding: calc(var(--u) * 17.7) calc(var(--u) * 19) 0;
+  color: #000;
+}
+.cal__head {
+  display: flex;
+  align-items: flex-start;
+}
+.cal__date {
+  font-size: calc(var(--u) * 35);
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+.cal__col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: calc(var(--u) * 24.6);
+  margin: calc(var(--u) * 3.5) 0 0 calc(var(--u) * 4.6);
+  padding-left: calc(var(--u) * 4.8);
+  border-left: 0.5px solid rgba(60, 60, 67, 0.22);
+  font-size: calc(var(--u) * 11);
+  line-height: calc(var(--u) * 13.8);
+  font-weight: 500;
+}
+.cal__col i { font-style: normal; }
+.cal__col i:first-child { margin-top: calc(var(--u) * -0.5); }
+.cal__lunar { color: rgba(60, 60, 67, 0.6); }
+.cal__week { color: #ff3b30; font-weight: 600; margin-left: calc(var(--u) * 4.8); }
+.cal__empty,
+.cal__event {
+  position: absolute;
+  left: calc(var(--u) * 19);
+  top: calc(var(--u) * 94.7);
+  margin: 0;
+  font-size: calc(var(--u) * 15);
+  line-height: calc(var(--u) * 18);
+  color: rgba(60, 60, 67, 0.6);
+}
+
+/* ================= 播客·待播清单（中号） =================
+ * MEASURED（Boxi 的截图）：紫色渐变；标题 17 粗体；封面 46×46，左边 18.6；
+ * 两集的间距 55.7；标题 13 号最多两行（行高 16.8），下面一行 11 号的淡字；播放按钮直径 28 */
+.card--podcasts {
+  background: linear-gradient(180deg, #c062e4 0%, #b356de 26%, #a045d3 52%, #9036c8 78%, #842cc0 100%);
+}
+.pod {
+  position: relative;
+  height: 100%;
+  color: #fff;
+}
+.pod__head {
+  position: absolute;
+  left: calc(var(--u) * 19.4);
+  right: calc(var(--u) * 15.5);
+  top: calc(var(--u) * 17.5);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.pod__title {
+  font-size: calc(var(--u) * 17);
+  line-height: calc(var(--u) * 20);
+  font-weight: 700;
+}
+.pod__glyph { width: calc(var(--u) * 20.5); height: calc(var(--u) * 22.2); margin-top: calc(var(--u) * -1.9); }
+.pod__ep {
+  position: absolute;
+  left: calc(var(--u) * 18.6);
+  right: calc(var(--u) * 12.9);
+  height: calc(var(--u) * 46);
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--u) * 13);
+}
+.pod__ep--0 { top: calc(var(--u) * 47.5); }
+.pod__ep--1 { top: calc(var(--u) * 103.2); }
+.pod__cover {
+  flex: none;
+  width: calc(var(--u) * 46);
+  height: calc(var(--u) * 46);
+  border-radius: calc(var(--u) * 5);
+}
+.pod__text {
+  flex: 1;
+  min-width: 0;
+  margin-top: calc(var(--u) * -0.2);
+}
+.pod__ep-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: calc(var(--u) * 13);
+  line-height: calc(var(--u) * 16.8);
+  font-weight: 500;
+}
+.pod__meta {
+  margin-top: calc(var(--u) * 1.4);
+  font-size: calc(var(--u) * 11);
+  line-height: calc(var(--u) * 13);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.62);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pod__play {
+  flex: none;
+  align-self: center;
+  width: calc(var(--u) * 28);
+  height: calc(var(--u) * 28);
+}
+.pod__play svg { display: block; width: 100%; height: 100%; }
+.pod__play-bg { fill: rgba(255, 255, 255, 0.2); }
+.pod__play-ring { fill: none; stroke: rgba(255, 255, 255, 0.85); stroke-width: 2; stroke-linecap: round; }
+
+/* ================= 健身·活动（中号） =================
+ * MEASURED（Boxi 的截图）：深色底（和时钟一样 #1C1C1E + 玻璃）；圆环外径 129、环宽 26.5，
+ * 离上下左边各 18；右边一列从 176 开始：11.5 号白色小标题，下面的数字：活动 24 号红字、
+ * 步数 / 距离 20 号灰字。红色是 Apple 健身的 #FA114F，没完成的轨道是它的 21% */
+.card--fitness { --card-bg: #1c1c1e; }
+.fit {
+  position: relative;
+  height: 100%;
+  padding: calc(var(--u) * 17.7) 0 0 calc(var(--u) * 18.1);
+  --move: #fa114f;
+}
+.fit__ring {
+  display: block;
+  width: calc(var(--u) * 129);
+  height: calc(var(--u) * 129);
+  overflow: visible;
+}
+.fit__track { fill: none; stroke: rgba(250, 17, 79, 0.21); }
+.fit__progress { fill: none; stroke: var(--move); stroke-linecap: round; }
+.fit__tip { fill: var(--move); }
+.fit__stats {
+  position: absolute;
+  left: calc(var(--u) * 176.2);
+  top: calc(var(--u) * 20.3);
+  margin: 0;
+  font-family: ui-rounded, "SF Pro Rounded", var(--font);
+}
+.fit__stats dt {
+  font-family: var(--font);
+  font-size: calc(var(--u) * 11.5);
+  line-height: calc(var(--u) * 14);
+  font-weight: 600;
+  color: #fff;
+}
+.fit__stats dd {
+  margin: calc(var(--u) * 0.5) 0 calc(var(--u) * 10.5);
+  font-size: calc(var(--u) * 20);
+  line-height: 1;
+  font-weight: 600;
+  color: #aeb4bd;
+  white-space: nowrap;
+}
+.fit__stats dd.fit__move {
+  margin-bottom: calc(var(--u) * 7.7);
+  font-size: calc(var(--u) * 24);
+  color: var(--move);
+}
+.fit__stats small {
+  margin-left: calc(var(--u) * 2.5);
+  font-family: var(--font);
+  font-size: calc(var(--u) * 13);
+  font-weight: 600;
+}
+
+/* ================= 备忘录（中号） =================
+ * MEASURED（Boxi 的截图）：黄色的头高 44.5（渐变 #FFD301 → #FBBC01），文件夹图标 + 「备忘录」白字；
+ * 一排 5.1 间距的小灰点；下面三行 13 号黑字，每行 37.1 高，中间 0.5px 的细线，左右边距 18 */
+.card--notes { --card-bg: #fff; }
+.notes {
+  position: relative;
+  height: 100%;
+  color: #000;
+}
+.notes__head {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 14.4);
+  height: calc(var(--u) * 44.5);
+  padding-left: calc(var(--u) * 19.6);
+  background: linear-gradient(180deg, #ffd301, #fbbc01);
+  color: #fff;
+  font-size: calc(var(--u) * 13.5);
+  font-weight: 700;
+}
+.notes__folder { width: calc(var(--u) * 19.5); height: calc(var(--u) * 14); }
+/* 小圆点：用重复的圆形渐变画出来，不用一个个画 */
+.notes__head::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--u) * 2);
+  right: 0;
+  top: calc(var(--u) * 49.4);
+  height: calc(var(--u) * 2);
+  background: radial-gradient(circle, #d6d6da calc(var(--u) * 0.62), transparent calc(var(--u) * 0.75)) 0 0 / calc(var(--u) * 5.14) 100% repeat-x;
+}
+.notes__list {
+  position: absolute;
+  left: calc(var(--u) * 18);
+  right: calc(var(--u) * 18);
+  top: calc(var(--u) * 49.7);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.notes__list li {
+  display: flex;
+  align-items: center;
+  height: calc(var(--u) * 37.1);
+  font-size: calc(var(--u) * 13);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.notes__list li + li { border-top: 0.5px solid rgba(60, 60, 67, 0.18); }

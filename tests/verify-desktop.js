@@ -1,3 +1,9 @@
+/*
+ * 电脑（鼠标）上的检查：各种窗口大小、调参侧边栏、窄窗口和手机上的底部面板。测的是打包好的网站（dist/）：
+ *   npm run build
+ *   (cd dist && python3 -m http.server 8780) &      # 端口被占用就换一个，再用 PORT=… 告诉脚本
+ *   PORT=8780 node tests/verify-desktop.js
+ */
 const { execSync } = require('child_process');
 const { chromium } = require(`${execSync('npm root -g').toString().trim()}/playwright`);
 const OUT = (process.env.OUT || require('path').join(require('os').tmpdir(), 'peel-shots')) + '/';
@@ -64,7 +70,8 @@ async function desktop(browser, w, h) {
   const btn = await rectOf(page, '#tunerOpen');
   const smallA = await rectOf(page, '#stackSmallA');
   const smallB = await rectOf(page, '#stackSmallB');
-  check(`${tag}: sidebar overlaps nothing (stack, small stacks, dots, hint, 调参)`, ![st, smallA, smallB, dots, hint, btn].some((r) => overlap(r, sb)) && dots.r + 12 <= sb.l, `stack r ${st.r.toFixed(0)}, dots r ${dots.r.toFixed(0)}, sidebar l ${sb.l.toFixed(0)}`);
+  const allDots = await page.evaluate(() => [...document.querySelectorAll('.dots, .widget__name')].map((e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; }));
+  check(`${tag}: sidebar overlaps nothing (stack, small stacks, all dots + names, hint, 调参)`, ![st, smallA, smallB, dots, hint, btn, ...allDots].some((r) => overlap(r, sb)) && Math.max(...allDots.map((d) => d.r)) + 12 <= sb.l, `stack r ${st.r.toFixed(0)}, dots r ${dots.r.toFixed(0)}, sidebar l ${sb.l.toFixed(0)}`);
   check(`${tag}: everything fits on screen (调参 button bottom inside viewport)`, btn.b <= h && smallA.b < hint.t, `btn bottom ${btn.b.toFixed(0)}`);
   const pad = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.home')).paddingRight));
   const mid = (16 + (w - pad)) / 2;
@@ -76,6 +83,22 @@ async function desktop(browser, w, h) {
 
   // 每个角（侧边栏开着）
   for (const c of ['tl', 'tr', 'br', 'bl']) await peelCorner(page, c, `${tag} open`);
+
+  // 鼠标上下拖卡片中间：切换（每一叠都试，往上换下一张、往下换回来），侧边栏开着也一样
+  for (const [i, id] of [[0, 'stack'], [1, 'stackSmallA'], [2, 'stackSmallB']]) {
+    const S = await rectOf(page, `#${id}`);
+    const cx = S.l + S.w / 2, cy = S.t + S.h / 2;
+    const info = () => page.evaluate((i) => { const p = peels[i]; const w = p.el.closest('.widget'); return { index: p.index, sw: p.swiper.state, label: w.querySelector('.widget__name').textContent, dot: [...w.querySelectorAll('.dots span')].findIndex((d) => d.classList.contains('is-active')) }; }, i);
+    const mouseSwipe = async (dy) => { await page.mouse.move(cx, cy); await page.mouse.down(); for (let k = 1; k <= 10; k++) { await page.mouse.move(cx, cy + dy * k / 10); await sleep(16); } await page.mouse.up(); await sleep(900); };
+    await mouseSwipe(-110);
+    const a = await info();
+    await mouseSwipe(110);
+    const b = await info();
+    check(`${tag}: mouse swipe on ${id} switches and back (dots + name follow)`, a.index === 1 && a.dot === 1 && a.sw === 'idle' && b.index === 0 && b.dot === 0 && a.label !== b.label, JSON.stringify({ a, b }));
+  }
+  const sbAfter = await rectOf(page, '.tn-sheet');
+  const stacksAfter = await page.evaluate(() => peels.map((p) => { const r = p.el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; }));
+  check(`${tag}: sidebar never covers a stack (after swipes)`, !stacksAfter.some((r) => overlap(r, sbAfter)));
 
   // 点页面空白处 / 卡片中间都不收起
   await page.mouse.click(30, h - 30); await sleep(100);
@@ -181,7 +204,7 @@ async function desktop(browser, w, h) {
     const toast = await page.evaluate(() => { const e = document.querySelector('.tn-toast'); const r = e.getBoundingClientRect(); const s = document.querySelector('.tn-sheet').getBoundingClientRect(); return { text: e.textContent, vis: e.classList.contains('is-visible'), inside: r.left >= s.left && r.right <= s.right && r.bottom <= s.bottom }; });
     const clip = await page.evaluate(() => navigator.clipboard.readText());
     let parsed = null; try { parsed = JSON.parse(clip); } catch (e) {}
-    check('sidebar: 复制参数 copies JSON + toast inside sidebar', toast.text === '已复制' && toast.vis && toast.inside && parsed && Object.keys(parsed).length === 12, JSON.stringify(toast));
+    check('sidebar: 复制参数 copies JSON + toast inside sidebar', toast.text === '已复制' && toast.vis && toast.inside && parsed && Object.keys(parsed).length === 14, JSON.stringify(toast));
     await page.screenshot({ path: `${OUT}desktop-1280x720-toast.png` });
     await page.evaluate(() => { navigator.clipboard.writeText = () => Promise.reject(new Error('no')); document.execCommand = () => false; });
     await page.click('.tn-foot .tn-btn--primary'); await sleep(250);

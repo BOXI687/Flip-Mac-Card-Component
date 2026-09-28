@@ -1,7 +1,7 @@
 # 把三个分支一起发布成一个网站：
-#   /     ← claude/github-cleanup-ux-prototype-541sop（基础版）
-#   /a/   ← version-a-opus
-#   /b/   ← version-b-emil
+#   /     ← claude/github-cleanup-ux-prototype-541sop（主线，React + Vite：先打包，只发布打包结果 dist/）
+#   /a/   ← version-a-opus（旧的纯 HTML 版本，原样发布）
+#   /b/   ← version-b-emil（旧的纯 HTML 版本，原样发布）
 #
 # 任何一个分支有新提交都会重新发布。A/B 分支的提交先触发 variant-push.yml，
 # 再由它唤起这里。这样发布总是从默认分支发起，符合 GitHub Pages 默认只允许默认分支发布的规则。
@@ -34,7 +34,25 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: claude/github-cleanup-ux-prototype-541sop
-          path: site
+          path: main
+
+      # 主线是 React + Vite：装依赖（按 package-lock.json 装一模一样的版本），再打包成 dist/
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: main/package-lock.json
+      - name: Build the main line (npm ci + vite build)
+        working-directory: main
+        run: |
+          npm ci
+          npm run build
+
+      # 网站根目录 = 打包结果。源代码、测试、笔记都不发布
+      - name: Put the build at the site root
+        run: |
+          mkdir site
+          cp -R main/dist/. site/
 
       - name: Check out version branches (skipped if a branch does not exist yet)
         run: |
@@ -47,11 +65,12 @@ jobs:
             fi
           done
 
-      # 给 CSS / JS 链接加上「?v=提交编号」。GitHub Pages 会让浏览器缓存文件 10 分钟，
+      # 给 /a/ 和 /b/ 的 CSS / JS 链接加上「?v=提交编号」。GitHub Pages 会让浏览器缓存文件 10 分钟，
       # 不加的话刚发布时可能出现「新页面 + 旧脚本」，按钮点了没反应。
-      - name: Add cache-busting version to CSS and JS links
+      # 主线不用加：Vite 打包出来的文件名里自带内容指纹（index-Cutp3kcq.js），内容一变文件名就变
+      - name: Add cache-busting version to CSS and JS links (/a/ and /b/ only)
         run: |
-          for dir in site site/a site/b; do
+          for dir in site/a site/b; do
             [ -f "$dir/index.html" ] || continue
             v=$(git -C "$dir" rev-parse --short HEAD)
             sed -i -E "s#(src|href)=\"((js|css)/[^\"?]+)\"#\1=\"\2?v=$v\"#g" "$dir/index.html"

@@ -1,3 +1,9 @@
+/*
+ * 手机（iPhone 393×852，触摸）上的检查。测的是打包好的网站（dist/），不是源代码：
+ *   npm run build
+ *   (cd dist && python3 -m http.server 8780) &      # 端口被占用就换一个，再用 PORT=… 告诉脚本
+ *   PORT=8780 node tests/verify-phone.js
+ */
 const { execSync } = require('child_process');
 const { chromium } = require(`${execSync('npm root -g').toString().trim()}/playwright`);
 const OUT = (process.env.OUT || require('path').join(require('os').tmpdir(), 'peel-shots')) + '/';
@@ -78,6 +84,8 @@ async function setup(browser, initScript, extra = {}) {
     flapShadow: () => peel.params.flapShadow,
     pressLift: () => peel.params.pressLift,
     underShade: () => peel.params.underShade,
+    swipeDamping: () => peel.params.swipeDamping,
+    swipeResponse: () => peel.params.swipeResponse,
   };
   for (const key of keys) {
     const info = await page.evaluate((key) => {
@@ -216,7 +224,7 @@ async function setup(browser, initScript, extra = {}) {
   const toast = await page.evaluate(() => { const e = document.querySelector('.tn-toast'); return [e.textContent, e.classList.contains('is-visible')]; });
   const clip = await page.evaluate(() => navigator.clipboard.readText());
   let parsed = null; try { parsed = JSON.parse(clip); } catch (e) {}
-  check('复制参数 copies JSON + shows toast', toast[0] === '已复制' && toast[1] && parsed && parsed.returnDamping === 0.82 && Object.keys(parsed).length === 12 && !('debug' in parsed), clip);
+  check('复制参数 copies JSON + shows toast', toast[0] === '已复制' && toast[1] && parsed && parsed.returnDamping === 0.82 && Object.keys(parsed).length === 14 && !('debug' in parsed), clip);
   await page.screenshot({ path: OUT + '07-copied-toast.png' });
 
   // 剪贴板失败 → 手动复制框
@@ -285,6 +293,116 @@ async function setup(browser, initScript, extra = {}) {
   await page.screenshot({ path: OUT + '11-small-peel.png' });
   await t('touchEnd'); await sleep(1300);
 
+
+  // ================= 上下滑切换（智能叠放） =================
+  // 每一叠：往上滑 → 下一张，往下滑 → 上一张，小圆点和名字跟着变；首尾相连（循环）
+  const stackIds = ['stack', 'stackSmallA', 'stackSmallB'];
+  const boxOf = (id) => page.evaluate((id) => { const r = document.getElementById(id).getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; }, id);
+  const stackInfo = (i) => page.evaluate((i) => {
+    const p = peels[i];
+    const area = p.el.closest('.widget');
+    const dots = [...area.querySelectorAll('.dots span')];
+    return {
+      index: p.index, swIndex: p.swiper.index, sw: p.swiper.state, peel: p.state,
+      top: p.top.getAttribute('aria-label'), n: p.cards.length,
+      dot: dots.findIndex((d) => d.classList.contains('is-active')), dotsN: dots.length,
+      label: area.querySelector('.widget__name').textContent,
+      topVisible: getComputedStyle(p.top).visibility === 'visible' && p.top.style.zIndex === '30',
+      transforms: p.cards.map((c) => c.style.transform).join(''),
+      clip: p.el.style.clipPath.slice(0, 12),
+    };
+  }, i);
+  const APP = { 电池: '电池', 世界时钟: '时钟', 天气: '天气', '播客·待播清单': '播客', '健身·活动': '健身', 备忘录: '备忘录', 日历: '日历' };
+  const others = (i) => page.evaluate((i) => peels.filter((_, k) => k !== i).map((p) => `${p.index}${p.swiper.state}${p.state}`).join(','), i);
+  // 从卡片中间竖着拖 dy（负数 = 往上）
+  const swipe = async (id, dy, steps = 12, delay = 16, release = true) => {
+    const B = await boxOf(id);
+    const a = { x: B.l + B.w / 2, y: B.t + B.h / 2 };
+    await drag(a, { x: a.x, y: a.y + dy }, steps, delay, release);
+  };
+  for (let i = 0; i < 3; i++) {
+    const id = stackIds[i];
+    const before = await stackInfo(i);
+    const othersBefore = await others(i);
+    const n = before.n;
+    const seq = [[-1, 1, 'up → next'], [1, 0, 'down → previous'], [1, n - 1, 'down from first wraps to last'], [-1, 0, 'up from last wraps to first']];
+    for (const [dir, want, what] of seq) {
+      await swipe(id, dir * 110);
+      await sleep(900);
+      const s = await stackInfo(i);
+      check(`swipe ${id}: ${what}`, s.index === want && s.swIndex === want && s.sw === 'idle' && s.peel === 'idle' && s.dot === want && s.dotsN === n && s.label === APP[s.top] && s.topVisible && s.transforms === '' && s.clip === '', JSON.stringify(s));
+    }
+    check(`swipe ${id}: other stacks unaffected`, (await others(i)) === othersBefore, `${othersBefore} -> ${await others(i)}`);
+  }
+  check('stack sizes: medium 6 cards, smalls 4 cards', (await page.evaluate(() => peels.map((p) => p.cards.length).join())) === '6,4,4');
+
+  // 滑到一半的截图（中号往上拖一半，不松手）
+  await swipe('stack', -70, 10, 16, false);
+  await sleep(60);
+  const midSwipe = await stackInfo(0);
+  check('mid-swipe: two cards on screen, clipped to the stack shape', midSwipe.sw === 'dragging' && midSwipe.clip.startsWith('polygon') && (midSwipe.transforms.match(/translate3d/g) || []).length === 2, JSON.stringify(midSwipe));
+  await page.screenshot({ path: OUT + '12-mid-swipe.png' });
+  await t('touchEnd'); await sleep(900);
+
+  // 角落优先：从角落竖着拖是掀角，不是切换
+  for (let i = 0; i < 3; i++) {
+    const B = await boxOf(stackIds[i]);
+    const idx0 = (await stackInfo(i)).index;
+    await drag({ x: B.r - 6, y: B.b - 6 }, { x: B.r - 6, y: B.b - 76 }, 10, 16, false);
+    await sleep(40);
+    const s = await stackInfo(i);
+    await t('touchEnd'); await sleep(1300);
+    const e = await stackInfo(i);
+    check(`corner zone on ${stackIds[i]}: vertical drag peels, never swipes`, s.peel === 'dragging' && s.sw === 'idle' && e.index === idx0 && e.peel === 'idle', JSON.stringify({ s: [s.peel, s.sw], e: [e.index, e.peel] }));
+  }
+  // 横着划不切换
+  {
+    const B = await boxOf('stack');
+    await drag({ x: B.l + B.w / 2 - 50, y: B.t + B.h / 2 }, { x: B.l + B.w / 2 + 60, y: B.t + B.h / 2 + 10 }, 10, 16);
+    await sleep(500);
+    const s = await stackInfo(0);
+    check('horizontal drag in the middle does not switch', s.index === 0 && s.sw === 'idle' && s.transforms === '', JSON.stringify(s));
+  }
+  // 滑到别的卡以后，掀角偷看的是「顺序里的下一张」；四个角都试，每一叠都试
+  for (let i = 0; i < 3; i++) {
+    const id = stackIds[i];
+    await swipe(id, -110); await sleep(900);
+    await swipe(id, -110); await sleep(900); // 现在最上面是第 3 张（index 2）
+    const B = await boxOf(id);
+    for (const c of ['tl', 'tr', 'br', 'bl']) {
+      const from = { tl: { x: B.l + 6, y: B.t + 6 }, tr: { x: B.r - 6, y: B.t + 6 }, br: { x: B.r - 6, y: B.b - 6 }, bl: { x: B.l + 6, y: B.b - 6 } }[c];
+      await drag(from, { x: B.l + B.w * 0.5, y: B.t + B.h * 0.5 }, 10, 16, false);
+      await sleep(40);
+      const m = await page.evaluate((i) => {
+        const p = peels[i];
+        const under = p.cards[(p.index + 1) % p.cards.length];
+        const name = p.C && Geometry.corners(p.W, p.H).find((k) => k.x === p.C.x && k.y === p.C.y).name;
+        const clone = p.flapFront.firstElementChild;
+        return {
+          s: p.state, name, index: p.index, under: under.getAttribute('aria-label'),
+          underOk: p.under === under && under.style.zIndex === '20' && getComputedStyle(under).visibility === 'visible',
+          othersHidden: p.cards.filter((c) => c !== p.top && c !== under).every((c) => getComputedStyle(c).visibility === 'hidden'),
+          cloneOk: !!clone && clone.className === p.top.className && clone.getAttribute('aria-label') === null,
+          frac: p.liftedFraction(Geometry.fold(p.C, p.displayP())),
+        };
+      }, i);
+      await t('touchEnd');
+      await sleep(1300);
+      const e = await stackInfo(i);
+      check(`${id} at card 3: ${c} corner peeks the next card (${m.under}) and returns`, m.s === 'dragging' && m.name === c && m.index === 2 && m.underOk && m.othersHidden && m.cloneOk && m.frac > 0.05 && e.peel === 'idle' && e.index === 2 && e.transforms === '', JSON.stringify({ m, e: [e.peel, e.index] }));
+    }
+    if (i === 0) {
+      await drag({ x: B.r - 6, y: B.b - 6 }, { x: B.l + B.w * 0.55, y: B.t + B.h * 0.35 }, 12, 16, false);
+      await sleep(40);
+      await page.screenshot({ path: OUT + '13-peel-weather-over-podcasts.png' });
+      await t('touchEnd'); await sleep(1300);
+    }
+    // 回到第一张
+    await swipe(id, 110); await sleep(900);
+    await swipe(id, 110); await sleep(900);
+    check(`${id}: back to first card`, (await stackInfo(i)).index === 0);
+  }
+  check('no horizontal overflow (after swipes)', (await overflow()) === 0);
 
   // ---- 保存 & 重新打开 ----
   await page.evaluate(() => { peel.setParams({ maxLift: 0.4, hintOnLoad: false }); localStorage.setItem(Tuner.STORE_KEY, JSON.stringify(peel.params)); });

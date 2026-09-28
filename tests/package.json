@@ -1,0 +1,4 @@
+{
+  "//": "测试脚本用老的 require 写法（CommonJS）；根目录的 package.json 是 type: module，这里单独改回来",
+  "type": "commonjs"
+}

@@ -42,7 +42,7 @@
 
 * { box-sizing: border-box; }
 
-html, body {
+html, body, #root {
   margin: 0;
   height: 100%;
   overflow: hidden;
@@ -149,7 +149,16 @@ body::before {
   width: var(--small-w);
   height: var(--small-w);
 }
-.stack.is-dragging { cursor: grabbing; }
+.stack.is-dragging,
+.stack.is-swiping { cursor: grabbing; }
+
+/* 引擎的图层盒子（React 只画这个空盒子，里面的东西都由 peel.js 放进去）。
+   故意不写 z-index：这样它不会自成一层，里面的阴影、纸角能和卡片按 z-index 交错排 */
+.peel-layers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
 
 .card {
   position: absolute;
@@ -188,6 +197,8 @@ body::before {
 }
 .card > * { position: relative; } /* 内容画在玻璃层上面 */
 
+/* 其它小组件的底色写在 widgets.css 里，每个小组件那一节的开头 */
+
 /* 世界时钟：深色底 #1C1C1E。MEASURED：Apple 图里时钟小组件底部是 (28,28,30)、顶部是 (51,51,53)，
    正好等于 #1C1C1E 再加上玻璃层的 #171717 —— 和设计稿对得上 */
 .card--clock { --card-bg: #1c1c1e; }
@@ -195,7 +206,7 @@ body::before {
 /*
  * 电池：玻璃材质（MEASURED：Apple 图里电池小组件透出后面的壁纸，不是纯色底）。
  * 卡片必须不透明（掀角时不能透出下面那张卡），所以是「假玻璃」：
- * 在卡片里再画一份壁纸，位置和屏幕对齐（main.js 算好 --wp-x / --wp-y），再压一层暗色让白字看得清。
+ * 在卡片里再画一份壁纸，位置和屏幕对齐（App.jsx 算好 --wp-x / --wp-y；上下滑时 swipe.js 会跟着改），再压一层暗色让白字看得清。
  * 壁纸是很柔的渐变，所以不用再模糊
  */
 :root { --glass-tint: rgba(38, 36, 24, 0.36); }
@@ -227,131 +238,7 @@ body::before {
 }
 .dots span.is-active { background: rgba(255, 255, 255, 0.95); }
 
-/* ================= 电池组件 ================= */
-/* 中号：4 个圆环一行。左右边距 18（设计稿的内容边距参考线） */
-.battery {
-  height: 100%;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  align-items: center;
-  padding: 0 calc(var(--u) * 18);
-}
-.battery__item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: calc(var(--u) * 11);
-}
-/* 圆环外径 64（MEASURED：Apple 图里电池小组件的圆环 ≈ 64pt，线宽 ≈ 6.2pt） */
-.ring {
-  position: relative;
-  width: calc(var(--u) * 64);
-  height: calc(var(--u) * 64);
-}
-.ring__svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible; /* 充电闪电会伸出圆环上沿 */
-}
-.ring__svg circle { fill: none; stroke-width: 6.2; }
-.ring__track { stroke: rgba(255, 255, 255, 0.16); }
-.ring__progress { stroke-linecap: round; }
-.ring__icon {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: #fff;
-}
-.ring__icon svg { width: calc(var(--u) * 28); height: calc(var(--u) * 28); }
-.battery__pct {
-  font-size: calc(var(--u) * 21);
-  font-weight: 500;
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-}
-/* 小号：4 个圆环排成 2×2，不写百分比（INFERRED：凭 iOS 的样子，Apple 图里没有这个状态） */
-.battery--small {
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(2, 1fr);
-  justify-items: center;
-  align-content: center;
-  row-gap: calc(var(--u) * 12);
-  padding: calc(var(--u) * 16);
-}
-.battery--small .ring { width: calc(var(--u) * 56); height: calc(var(--u) * 56); }
-.battery--small .ring__icon svg { width: calc(var(--u) * 25); height: calc(var(--u) * 25); }
-
-/* ================= 世界时钟组件 ================= */
-/* 中号：4 个表盘，第一个离左边 18、最后一个离右边 18，中间平均分（MEASURED：Apple 图） */
-.clocks {
-  height: 100%;
-  display: grid;
-  grid-template-columns: repeat(4, auto);
-  justify-content: space-between;
-  align-content: center;
-  padding: 0 calc(var(--u) * 18);
-}
-.clocks__item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  line-height: calc(var(--u) * 12.5);
-  white-space: nowrap;
-}
-/* 表盘直径 72（MEASURED） */
-.clock {
-  width: calc(var(--u) * 72);
-  height: calc(var(--u) * 72);
-  margin-bottom: calc(var(--u) * 4);
-  overflow: visible;
-}
-/* 表盘颜色：白天白底黑字；夜里深灰底 (54,54,56) 白字（MEASURED：Apple 图里东京、悉尼是深色表盘） */
-.clock__face { fill: #fff; }
-.clock__numbers text {
-  font-family: var(--font);
-  font-size: 16px; /* 表盘格子是 100 宽，这里的 px 就是格子单位：数字高约为直径的 12%（MEASURED） */
-  font-weight: 500;
-  fill: #000;
-  text-anchor: middle;
-  dominant-baseline: central;
-}
-.clock__hour line,
-.clock__minute line { stroke: #000; stroke-width: 3.3; stroke-linecap: round; }
-.clock line.clock__neck { stroke-width: 1.6; } /* 靠近圆心那一小段是细的 */
-.clock__second line { stroke: var(--orange); stroke-width: 1.1; stroke-linecap: round; }
-.clock__pin { fill: #fff; stroke: var(--orange); stroke-width: 1.3; } /* 圆心的橙色小圈 */
-.is-night .clock__face { fill: #363638; }
-.is-night .clock__numbers text { fill: #fff; }
-.is-night .clock__hour line,
-.is-night .clock__minute line { stroke: #fff; }
-.is-night .clock__pin { fill: #363638; }
-/* 城市 11.5 半粗白字；今天 / 时差 11.5 灰字 = iOS 的 secondaryLabel（MEASURED：(156,156,161)） */
-.clocks__city { font-size: calc(var(--u) * 11.5); font-weight: 600; }
-.clocks__sub {
-  font-size: calc(var(--u) * 11.5);
-  color: rgba(235, 235, 245, 0.6);
-}
-/* 小号：一个大表盘，城市名写在表盘里（INFERRED：凭 iOS「城市」时钟小组件的样子） */
-.clocks--small {
-  grid-template-columns: auto;
-  justify-content: center;
-  padding: 0;
-}
-.clocks--small .clock { width: calc(var(--u) * 140); height: calc(var(--u) * 140); margin: 0; }
-.clocks--small .clock__numbers text { font-size: 13px; } /* 大表盘上数字相对小一些，不挤 */
-.clock__label {
-  font-family: var(--font);
-  font-size: 9px;
-  font-weight: 600;
-  fill: #8e8e93;
-  text-anchor: middle;
-  dominant-baseline: central;
-}
-
-/* ================= 翻角图层（由 peel.js 创建） ================= */
+/* ================= 翻角图层（由 engine/peel.js 创建） ================= */
 .peel-under,
 .peel-shadow,
 .peel-flap-wrap,
@@ -450,7 +337,7 @@ body::before {
 .tuner-open svg { width: 20px; height: 20px; }
 .tuner-open:active { background: rgba(0, 0, 0, 0.4); }
 
-/* ================= 调参面板（由 tuner.js 生成） ================= */
+/* ================= 调参面板（由 engine/tuner.js 生成） ================= */
 /* 从底部滑上来的面板。顶部留出小组件的位置：开着面板也能拖卡片、马上看到效果 */
 .tn-sheet {
   --tn-blue: #0a84ff;
