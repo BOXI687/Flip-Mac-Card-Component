@@ -13,7 +13,9 @@
  *   B 磁铁吸过去：没有座位表。每个元素有一个「重要程度」，口子越大、越重要，就被吸得越近；
  *             吸过来的元素沿折痕方向排成一串，中心对准口子的重心；不重要的让开、变淡。
  *             弹簧更软，会轻轻晃，移动时还会顺着方向微微歪一下（停下来就正了）。
- * 另外「数字滚动」：主角里的数字像里程表一样，露出来时从 0 滚到真实数值，盖回去时滚回 0。
+ * 另外「数字逐位升起」：主角的数字一位一位从下面升起来（每一位从头到尾都是正确的那个字），
+ * 盖回去时一位一位沉回去。以前是里程表滚动，但拖得慢时轮子会停在中间的数字上（比如「15:96」），
+ * 显示了错的信息 —— 规矩是：位置、大小、透明度可以跟手，数字本身永远是对的。
  *
  * 规矩（和 peel.js 一样）：
  *   - 不认识 React。只改元素的 transform / opacity（手机上交给显卡），不改布局。
@@ -41,7 +43,9 @@ const smooth = (a, b, x) => {
 const MIN_SCALE = 0.2; // 口子太小时，元素最小缩到原来的多少（像从角落里「长」出来，比被纸盖住一半好看）
 const GAP = 0.045; // 座位之间的空隙 = 卡片高度 × 这个比例
 const ENGAGE = [0.015, 0.2]; // 掀开面积（占上限的比例）从 1.5% 到 20% 之间，信息从原位走到口子里
-const ROLL = [0.05, 0.42]; // 数字滚动：掀开 5% 开始滚，42% 时停在真实数值
+const RISE = [0.06, 0.36]; // 数字逐位升起：掀开 6% 开始升，36% 时每一位都到位（主角大约 15%~20% 才在口子里看得清，升起的过程要留给看得见的这一段）
+const RISE_STAGGER = 0.3; // 后一位比前一位晚多少才开始升（按一位自己升起的那一段算：0.3 = 前一位升到 30% 时后一位出发）
+const RISE_FADE = 0.45; // 每一位在升起的前 45% 里从透明变到不透明（主要靠「从下面露出来」，淡入只是让边缘柔一点）
 const TILT = 0.008; // B：每秒移动 1px 歪多少度（400px/s ≈ 3°）
 const TILT_MAX = 3.5; // B：最多歪几度
 const HISTORY_EXTRA = 40; // 出发间隔的历史记录多留几毫秒
@@ -150,11 +154,11 @@ export class Reveal {
       it.rank = k < 0 ? 0 : k;
     });
 
-    // ---- 数字滚动 ----
+    // ---- 数字逐位升起（说明里的 roll 写的是哪个元素；名字沿用以前的「滚动」，存过的设置照样能用） ----
     this.roll = null;
     this.rollOn = !!p.peekRoll;
     const rollEl = spec.roll && this.byKey[spec.roll] && this.byKey[spec.roll].el;
-    if (this.rollOn && rollEl) this.roll = buildRoll(rollEl);
+    if (this.rollOn && rollEl) this.roll = buildRise(rollEl);
     this.rollR = 0;
     this.rollV = 0;
 
@@ -184,7 +188,7 @@ export class Reveal {
   step(now, geom) {
     if (!this.items) return;
     const p = this.peel.params;
-    // 拖的时候在面板里换了风格 / 开关了数字滚动：重新开始（下一帧起用新的）
+    // 拖的时候在面板里换了风格 / 开关了数字升起：重新开始（下一帧起用新的）
     if (p.peekStyle !== this.style || !!p.peekRoll !== this.rollOn) {
       const { card, spec } = this;
       this.end();
@@ -227,7 +231,7 @@ export class Reveal {
       this.write(it);
     }
 
-    // 3) 数字滚动：跟着主角一起出发（同样的延迟），用一个不晃的弹簧
+    // 3) 数字逐位升起：跟着主角一起出发（同样的延迟），用一个不晃的弹簧（临界阻尼：跟得顺，不会冲过头）
     if (this.roll) {
       const hero = this.byKey[this.heroKey];
       const target = this.sample(now - (hero ? hero.rank : 0) * stagger, -1);
@@ -237,11 +241,16 @@ export class Reveal {
         this.rollV += (w * w * (target - this.rollR) - 2 * w * this.rollV) * h;
         this.rollR += this.rollV * h;
       }
+      // 几乎追上了就直接停在目标上：手指停住时数字真正停住（不再每帧挪零点零几 px、不再每帧重写样式）
+      if (Math.abs(target - this.rollR) < 3e-4 && Math.abs(this.rollV) < 0.01) {
+        this.rollR = target;
+        this.rollV = 0;
+      }
       this.roll.set(clamp(this.rollR, 0, 1));
     }
   }
 
-  /** 从历史里取 t 时刻的目标（两帧之间线性插值）。i = -1 取数字滚动的目标 */
+  /** 从历史里取 t 时刻的目标（两帧之间线性插值）。i = -1 取数字升起的目标 */
   sample(t, i) {
     const H = this.hist;
     const pick = (e) => (i < 0 ? e.T.roll : e.T.items[i]);
@@ -281,7 +290,7 @@ export class Reveal {
   homeTargets(o) {
     return {
       items: this.items.map((it) => [0, 0, 1, it.homeA]),
-      roll: smooth(ROLL[0], ROLL[1], o),
+      roll: riseProgress(o),
     };
   }
 
@@ -428,7 +437,7 @@ export class Reveal {
       // 刚开始掀：从原位慢慢走过来（e 从 0 到 1）
       return this.rel(it, lerp(it.home.x, x, e), lerp(it.home.y, y, e), lerp(1, s, e), lerp(it.homeA, a, e));
     });
-    return { items, roll: smooth(ROLL[0], ROLL[1], o) };
+    return { items, roll: riseProgress(o) };
   }
 
   // ---------------- B 磁铁吸过去 ----------------
@@ -529,7 +538,7 @@ export class Reveal {
       // 透明度到快吸到位时才回到 1：半路上的元素淡淡的，不会和已经坐好的主角抢眼
       return this.rel(it, lerp(A[0], st.x, q), lerp(A[1], st.y, q), lerp(A[2], st.s, q), lerp(A[3], 1, smooth(0.45, 1, q)));
     });
-    return { items, roll: smooth(ROLL[0], ROLL[1], o) };
+    return { items, roll: riseProgress(o) };
   }
 
   /** 测试和控制台用：现在每个元素的状态 */
@@ -543,8 +552,7 @@ export class Reveal {
       o: this.o,
       levels: this.levels,
       hero: hero && { x: hero.home.x + hero.x, y: hero.home.y + hero.y, s: hero.s, a: hero.a, rot: hero.rot || 0 },
-      roll: this.roll ? this.roll.shown() : null,
-      rollFinal: this.roll ? this.roll.text : null,
+      rise: this.roll ? this.roll.state() : null, // 数字升起：每一位是什么字、升到哪了
     };
   }
 }
@@ -657,85 +665,179 @@ function insideBox(rv, f, x0, y0, x1, y1) {
     && f.dist({ x: x0, y: y1 }) <= -margin && f.dist({ x: x1, y: y1 }) <= -margin;
 }
 
-// ---------------- 数字滚动（里程表） ----------------
+// ---------------- 数字逐位升起 ----------------
 /*
- * 在元素里面盖一层一模一样的字，其中每个数字换成一条竖着的「数字带」0~9,0，
- * 上下挪这条带子就像里程表的轮子在转。原来的字变透明（还在，占着位置，读屏也还读它）。
- * 每个轮子从 0 转一圈多一点停到自己的数字（所以 0 和 1 也看得出在滚），左边的先停。
- * 这一层不归 React 管；数值变了（比如跨了一分钟）就重新搭一次。
+ * 在元素里面盖一层：原来的每一个字（数字、°、%、: 都算）各放进一个小「窗口」，
+ * 窗口和那个字原来占的地方一样大（用 Range 一个字一个字量出来），窗口下沿以下的部分被裁掉。
+ * 字在窗口里从下面（往下挪一整个字高）升到原位：还没升起来时它藏在窗口下沿下面，看不见。
+ * 每一位从头到尾都是它自己那个正确的字，所以不管拖到哪、停在哪，看到的都不会是错的数字。
+ * 原来的字变透明（还在，占着位置，读屏也还读它）。这一层不归 React 管；
+ * 数值变了（比如跨了一分钟）就马上用新的字重新搭一次（不会从旧数值「滚」到新数值）。
  */
-function buildRoll(el) {
+
+/** 数字升起的总进度：掀开 6% 时是 0，36% 时是 1，中间匀速 —— 缓动放在每一位自己身上 */
+function riseProgress(o) {
+  return clamp((o - RISE[0]) / (RISE[1] - RISE[0]), 0, 1);
+}
+
+/**
+ * 和 CSS 的 cubic-bezier(x1, y1, x2, y2) 一样的缓动曲线，做成一个函数：
+ * 输入 0~1 的进度（横轴），输出缓动后的 0~1（纵轴）。横轴是单调的，所以用二分法反查参数 u
+ */
+function cubicBezier(x1, y1, x2, y2) {
+  const at = (p1, p2, u) => 3 * p1 * u * (1 - u) * (1 - u) + 3 * p2 * u * u * (1 - u) + u * u * u;
+  return (x) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let lo = 0;
+    let hi = 1;
+    let u = x;
+    for (let i = 0; i < 24; i++) {
+      const v = at(x1, x2, u);
+      if (Math.abs(v - x) < 1e-5) break;
+      if (v < x) lo = u;
+      else hi = u;
+      u = (lo + hi) / 2;
+    }
+    return at(y1, y2, u);
+  };
+}
+// 快出慢停（ease-out）：一开始就明显在动（跟手），快到位时轻轻地停下，不会「咚」一下
+const EASE_RISE = cubicBezier(0.22, 1, 0.36, 1);
+
+function buildRise(el) {
   const cs = getComputedStyle(el);
-  const color = cs.color;
   const prevPos = el.style.position;
   const prevColor = el.style.color;
   if (cs.position === 'static') el.style.position = 'relative';
-  const ov = document.createElement('span');
-  ov.className = 'peek-roll';
-  ov.setAttribute('aria-hidden', 'true');
-  ov.style.color = color;
-  ov.style.padding = cs.padding;
-  el.append(ov);
+  const layer = document.createElement('span');
+  layer.className = 'peek-rise';
+  layer.setAttribute('aria-hidden', 'true');
+  layer.style.color = cs.color;
+  el.append(layer);
   el.style.color = 'transparent';
 
-  const own = () => Array.from(el.childNodes).filter((n) => n !== ov).map((n) => n.textContent).join('');
-  let wheels = [];
+  // 元素自己的字（不算这一层）
+  const ownNodes = () => {
+    const out = [];
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) if (!layer.contains(n)) out.push(n);
+    return out;
+  };
+  const own = () => ownNodes().map((n) => n.data).join('');
+
+  let glyphs = [];
   let text = '';
+  let last = -1;
+
+  // 搭这一层：每个字量一次位置，放进自己的窗口
   const fill = () => {
     text = own();
-    ov.replaceChildren();
-    wheels = [];
-    for (const ch of text) {
-      if (/\d/.test(ch)) {
-        const col = document.createElement('span');
-        col.className = 'peek-roll__col';
-        const ghost = document.createElement('span');
-        ghost.className = 'peek-roll__ghost';
-        ghost.textContent = ch;
-        const strip = document.createElement('span');
-        strip.className = 'peek-roll__strip';
-        for (const d of '01234567890') {
-          const cell = document.createElement('span');
-          cell.textContent = d;
-          strip.append(cell);
+    layer.replaceChildren();
+    glyphs = [];
+    // 量「平时」的位置：先把引擎给整个元素的 transform 暂时拿掉（同一帧里放回去，屏幕上看不到）
+    const tf = el.style.transform;
+    el.style.transform = 'none';
+    const er = el.getBoundingClientRect();
+    const k = el.offsetWidth && er.width ? el.offsetWidth / er.width : 1; // 外面有缩放时，换算回元素自己的 px
+    const range = document.createRange();
+    for (const node of ownNodes()) {
+      // 字在别的子元素里（字号、粗细可能不一样）：把那个子元素的字体抄过来
+      const pcs = node.parentElement !== el ? getComputedStyle(node.parentElement) : null;
+      let i = 0;
+      for (const ch of node.data) {
+        range.setStart(node, i);
+        range.setEnd(node, i + ch.length);
+        i += ch.length;
+        const r = range.getBoundingClientRect();
+        const h = r.height * k;
+        const win = document.createElement('span');
+        win.className = 'peek-rise__win';
+        win.style.left = `${((r.left - er.left) * k - el.clientLeft).toFixed(2)}px`;
+        win.style.top = `${((r.top - er.top) * k - el.clientTop).toFixed(2)}px`;
+        win.style.width = `${(r.width * k).toFixed(2)}px`;
+        win.style.height = `${h.toFixed(2)}px`;
+        const g = document.createElement('span');
+        g.className = 'peek-rise__glyph';
+        g.textContent = ch;
+        // 行高 = 窗口高：字正好摆在窗口里原来的位置
+        g.style.lineHeight = `${h.toFixed(2)}px`;
+        if (pcs) {
+          for (const prop of ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'fontStretch', 'fontVariantNumeric', 'fontFeatureSettings', 'letterSpacing']) g.style[prop] = pcs[prop];
         }
-        col.append(ghost, strip);
-        ov.append(col);
-        wheels.push({ strip, d: +ch, q: 0 });
-      } else ov.append(document.createTextNode(ch));
+        win.append(g);
+        layer.append(win);
+        glyphs.push({ g, win, ch, h, x: (r.left - er.left) * k, y: (r.top - er.top) * k, p: 0, written: '' });
+      }
     }
+    // 对齐：单独摆的字和原来一整串里的字，排版上会差零点几 px（字距微调 kerning、行高取整）。
+    // 量一下每个字实际落在哪，差多少就把窗口挪多少 —— 升到位时和原来的字严丝合缝
+    for (const gl of glyphs) {
+      range.selectNodeContents(gl.g);
+      const b = range.getBoundingClientRect();
+      const dx = gl.x - (b.left - er.left) * k;
+      const dy = gl.y - (b.top - er.top) * k;
+      gl.win.style.left = `${(parseFloat(gl.win.style.left) + dx).toFixed(2)}px`;
+      gl.win.style.top = `${(parseFloat(gl.win.style.top) + dy).toFixed(2)}px`;
+    }
+    el.style.transform = tf;
   };
-  fill();
-  let last = -1;
+
   const api = {
     get text() {
       return text;
     },
+    /** r = 总进度 0~1：第 j 位在 r 走到它那一段时升起，前后几位的段有重叠（一位接一位，但不是一位等一位） */
     set(r) {
-      if (own() !== text) {
-        fill();
-        last = -1;
-      }
+      // 弹簧只会无限接近 0 / 1：离得很近就当作到了（到位的字不留变换，最清楚）
+      if (r > 0.999) r = 1;
+      else if (r < 0.001) r = 0;
       if (Math.abs(r - last) < 1e-4) return;
       last = r;
-      const n = wheels.length;
-      wheels.forEach((w, j) => {
-        // 左边的轮子先停：第 j 个轮子在 r 走到它那一段时才转完
-        const rj = clamp(r * (1 + 0.18 * (n - 1)) - 0.18 * j, 0, 1);
-        w.q = ((w.d + 10) * rj) % 10; // 转一圈多：从 0 转过 10 格再到 d
-        w.strip.style.transform = `translateY(${((-w.q * 100) / 11).toFixed(3)}%)`;
+      const n = glyphs.length;
+      const span = 1 + RISE_STAGGER * (n - 1);
+      glyphs.forEach((gl, j) => {
+        const q = clamp(r * span - RISE_STAGGER * j, 0, 1); // 这一位自己的进度
+        gl.p = q;
+        let key;
+        let tf = '';
+        let op = '';
+        if (q >= 1) key = 'rest'; // 到位：不留变换，字最清楚，和原来的字完全重合
+        else {
+          const e = EASE_RISE(q);
+          tf = `translateY(${((1 - e) * gl.h).toFixed(2)}px)`;
+          op = smooth(0, RISE_FADE, q).toFixed(3);
+          key = `${tf}|${op}`;
+        }
+        if (key === gl.written) return; // 和上一帧一样就不写
+        gl.written = key;
+        gl.g.style.transform = tf;
+        gl.g.style.opacity = op;
       });
     },
-    /** 现在显示的是什么（测试用） */
-    shown() {
-      let k = 0;
-      return Array.from(text).map((ch) => (/\d/.test(ch) ? String(Math.round(wheels[k++].q) % 10) : ch)).join('');
+    /** 现在每一位是什么字、升到哪了（测试和控制台用） */
+    state() {
+      return { text, glyphs: glyphs.map((gl) => ({ ch: gl.ch, p: +gl.p.toFixed(3) })) };
     },
     remove() {
-      ov.remove();
+      mo.disconnect();
+      layer.remove();
       el.style.color = prevColor;
       el.style.position = prevPos;
     },
   };
+
+  // React 改了字（跨了一分钟）：在浏览器画出来之前（微任务里）就换成新的字，旧的字一帧也不会多留
+  const mo = new MutationObserver(() => {
+    if (own() === text) return; // 这一层自己的改动（或者字没变）不用管
+    const r = last;
+    fill();
+    last = -1;
+    api.set(Math.max(0, r));
+  });
+  mo.observe(el, { childList: true, characterData: true, subtree: true });
+
+  fill();
+  api.set(0);
   return api;
 }

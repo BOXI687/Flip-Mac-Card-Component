@@ -514,26 +514,20 @@
   text-align: center;
 }
 
-/* 数字滚动（里程表）：盖在原来的字上面的一层，每个数字是一条 0~9,0 的竖带子，只露出一格 */
-.peek-roll {
-  position: absolute;
-  inset: 0;
-  white-space: nowrap;
-  pointer-events: none;
-}
-.peek-roll__col {
-  position: relative;
-  display: inline-block;
-  clip-path: inset(0 -0.3em); /* 只裁上下，左右放宽：窄的数字（1）滚过宽的数字时不会被切掉 */
-}
-.peek-roll__ghost { visibility: hidden; } /* 撑出和真实数字一样的宽度 */
-.peek-roll__strip {
+/* 数字逐位升起：盖在原来的字上面的一层。每个字有自己的小窗口（位置、大小由 reveal.js 量好写上），
+ * 窗口只裁掉下沿以下的部分（左右、上面放宽一点，字形伸出一点点也不会被切掉），
+ * 字从窗口下面升上来 */
+.peek-rise {
   position: absolute;
   left: 0;
-  right: 0;
   top: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  pointer-events: none;
+  text-align: left; /* 窗口已经放在字原来的位置上，字在窗口里靠左摆（不再居中一次） */
+  text-indent: 0;
+  white-space: pre;
 }
-.peek-roll__strip > span { display: block; }
+.peek-rise__win {
+  position: absolute;
+  clip-path: inset(-0.3em -0.3em 0 -0.3em);
+}
+.peek-rise__glyph { display: block; }

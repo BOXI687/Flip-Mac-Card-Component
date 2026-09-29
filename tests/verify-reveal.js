@@ -7,8 +7,11 @@
  * 天气（中号）、电池（小号）、世界时钟（中号）× A 换座位 / B 磁铁 × 四个角：
  *   - 慢慢掀的时候，主角每一帧的位置是连续的（没有突然跳一下）
  *   - 停住以后，主角的中心在露出来的口子里、是正的（没有歪、没有镜像）、看得见
- *   - 掀到最大：数字滚动停在真实数值
- *   - 松手盖回：下面那张卡上所有改过的样式都清掉了（transform / opacity / 数字滚动那一层）
+ *   - 掀到最大：数字逐位升起全部到位，显示的是真实数值
+ *   - 松手盖回：下面那张卡上所有改过的样式都清掉了（transform / opacity / 数字升起那一层）
+ * 数字逐位升起（修「15:96」那种错数字）：天气 °、电池 %、世界时钟 : 各两个角，慢慢掀、中途停三次、慢慢盖回，
+ *   每一帧都检查：数字层里每一位都是真实数值里那个位置上的字，没有多余的字；原来的字是透明的（不会叠两层）；
+ *   停住时数字也停住；掀到最大时每一位都升到位，和原来的字重合（差不到 1px）。
  * 另外：风格「关」时什么都不动；系统「减弱动态效果」时什么都不动；换了一张卡再掀，量的是新的那张；
  * 天气（小号）、电池（中号）、世界时钟（小号）各跑一次 A / B；没有 console 报错。
  */
@@ -78,9 +81,9 @@ const heroState = (page, i) => page.evaluate((i) => {
   const d = p.reveal.debug();
   if (!d.active) return { active: false };
   const el = p.under.querySelector(`[data-peek="${d.heroKey}"]`);
-  // 文字的框：只量元素自己的字（不算数字滚动那一层：它的数字带子很长，只是被裁掉了看不见）
+  // 文字的框：只量元素自己的字（不算数字升起那一层）
   const r = el instanceof SVGElement ? el.getBoundingClientRect() : (() => {
-    const own = [...el.childNodes].filter((n) => !(n.classList && n.classList.contains('peek-roll')));
+    const own = [...el.childNodes].filter((n) => !(n.classList && n.classList.contains('peek-rise')));
     const g = document.createRange();
     g.setStartBefore(own[0]);
     g.setEndAfter(own[own.length - 1]);
@@ -95,7 +98,7 @@ const heroState = (page, i) => page.evaluate((i) => {
   return {
     active: true, key: d.heroKey, o: +d.o.toFixed(3), c: { x: +c.x.toFixed(1), y: +c.y.toFixed(1) }, inside,
     upright: m.a > 0 && m.d > 0 && Math.abs(rot) < 1, rot: +rot.toFixed(2), scale: +Math.hypot(m.a, m.b).toFixed(3),
-    opacity: +getComputedStyle(el).opacity, roll: d.roll, rollFinal: d.rollFinal,
+    opacity: +getComputedStyle(el).opacity, rise: d.rise,
   };
 }, i);
 
@@ -106,7 +109,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
   p.cards.forEach((card) => card.querySelectorAll('[data-peek]').forEach((el) => {
     if (el.style.transform || el.style.opacity || el.style.transformOrigin || el.style.color || el.style.position) bad.push(`${el.dataset.peek}:${el.getAttribute('style')}`);
   }));
-  const overlays = p.el.querySelectorAll('.peek-roll').length;
+  const overlays = p.el.querySelectorAll('.peek-rise').length;
   return { state: p.state, active: p.reveal.active, bad, overlays };
 }, i);
 
@@ -138,13 +141,15 @@ const leftovers = (page, i) => page.evaluate((i) => {
         `${trace.length} frames, max step ${Math.max(0, ...v).toFixed(1)}px, max step change ${jump.toFixed(1)}px, max scale step ${sJump.toFixed(3)}`);
       check(`${name} ${style.toUpperCase()} ${c}: paused mid-peel → hero inside the opening, upright, visible`, h.active && h.inside && h.upright && h.opacity > 0.9 && h.scale > 0.35,
         JSON.stringify({ key: h.key, o: h.o, c: h.c, rot: h.rot, scale: h.scale, opacity: h.opacity }));
-      // 再往外拖到最大：数字滚动停在真实数值
+      // 再往外拖到最大：数字逐位升起全部到位
       const far = { x: mid.x + (mid.x - from.x) * 1.4, y: mid.y + (mid.y - from.y) * 1.4 };
       for (let k = 1; k <= 12; k++) { await t('touchMove', to.x + (far.x - to.x) * k / 12, to.y + (far.y - to.y) * k / 12); await sleep(16); }
       await sleep(700);
       const hf = await heroState(page, cs.stack);
       if (c === 'br' || c === 'tl') {
-        check(`${name} ${style.toUpperCase()} ${c}: fully peeled → odometer shows the real value`, hf.active && hf.roll === hf.rollFinal && /\d/.test(hf.rollFinal || '') && hf.inside, `${hf.roll} / ${hf.rollFinal}, o ${hf.o}, inside ${hf.inside}`);
+        const rs = hf.rise;
+        check(`${name} ${style.toUpperCase()} ${c}: fully peeled → every digit risen, showing the real value`, hf.active && !!rs && /\d/.test(rs.text) && rs.glyphs.map((g) => g.ch).join('') === rs.text && rs.glyphs.every((g) => g.p === 1) && hf.inside,
+          `${rs && rs.glyphs.map((g) => `${g.ch}:${g.p}`).join(' ')} / ${rs && rs.text}, o ${hf.o}, inside ${hf.inside}`);
       }
       await t('touchEnd');
       await page.waitForFunction((i) => peels[i].state === 'idle', cs.stack, { timeout: 5000 }).catch(() => {});
@@ -172,6 +177,141 @@ const leftovers = (page, i) => page.evaluate((i) => {
       const lo = await leftovers(page, cs.stack);
       check(`${name} ${style.toUpperCase()} ${c}: hero in the opening, upright; cleared after release`, h.active && h.inside && h.upright && h.opacity > 0.9 && lo.bad.length === 0 && lo.overlays === 0 && !lo.active,
         JSON.stringify({ key: h.key, o: h.o, c: h.c, rot: h.rot, lo }));
+    }
+  }
+
+  // ================= 数字逐位升起：每一帧看到的都是正确的字 =================
+  // 天气 °、电池 %、世界时钟 : × 两个角；慢慢掀（很多小步）、停三次、慢慢盖回、松手
+  const RISE_CASES = [['weather-medium', /^\d+°$/], ['battery-small', /^\d+%$/], ['clock-medium', /^\d\d:\d\d$/]];
+  for (const [name, shape] of RISE_CASES) {
+    for (const c of ['br', 'tl']) {
+      const cs = CASES[name];
+      const B = await prepare(page, cs, 'a');
+      // 页面里的检查器：每一帧（requestAnimationFrame）都看一遍数字层
+      await page.evaluate((i) => {
+        const p = peels[i];
+        const S = (window.__rise = { frames: 0, layerFrames: 0, bad: [], texts: new Set(), partial: 0, on: true });
+        const tick = () => {
+          if (!S.on) return;
+          const d = p.reveal.debug();
+          if (d.active) {
+            S.frames++;
+            const el = p.under.querySelector(`[data-peek="${d.heroKey}"]`);
+            const layer = el.querySelector(':scope > .peek-rise');
+            if (layer) {
+              S.layerFrames++;
+              // 「真实数值」= React 写在元素里的字（不算数字层）
+              const own = [...el.childNodes].filter((n) => n !== layer).map((n) => n.textContent).join('');
+              S.texts.add(own);
+              const wins = [...layer.children];
+              const chars = [...own];
+              const err = (m) => S.bad.length < 5 && S.bad.push(`o ${d.o.toFixed(3)}: ${m}`);
+              if (layer.childNodes.length !== wins.length) err('stray text node in the layer');
+              if (wins.length !== chars.length) err(`${wins.length} glyphs for "${own}"`);
+              if (layer.textContent !== own) err(`layer shows "${layer.textContent}", real "${own}"`);
+              wins.forEach((w, j) => {
+                if (w.childNodes.length !== 1 || w.firstChild.childNodes.length !== 1 || w.textContent !== chars[j]) err(`glyph ${j} is "${w.textContent}", real "${chars[j]}"`);
+                const op = +getComputedStyle(w.firstChild).opacity;
+                if (op > 0.02 && op < 0.98) S.partial++;
+              });
+              // 原来的字必须是透明的，否则会和数字层叠成两层
+              if (!/rgba\(.*, 0\)|transparent/.test(getComputedStyle(el).color)) err(`original text visible (${getComputedStyle(el).color})`);
+            }
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }, cs.stack);
+      const from = corners(B)[c];
+      const mid = { x: B.l + B.w / 2, y: B.t + B.h / 2 };
+      const far = { x: mid.x + (mid.x - from.x) * 1.4, y: mid.y + (mid.y - from.y) * 1.4 };
+      const pos = (k) => ({ x: from.x + (far.x - from.x) * k, y: from.y + (far.y - from.y) * k });
+      const oNow = () => page.evaluate((i) => { const d = peels[i].reveal.debug(); return d.active ? d.o : 0; }, cs.stack);
+      const riseNow = () => page.evaluate((i) => { const d = peels[i].reveal.debug(); return d.active && d.rise ? d.rise.glyphs.map((g) => g.p).join() : ''; }, cs.stack);
+      await t('touchStart', from.x, from.y);
+      // 很多小步往外掀；掀开程度过了 8% / 14% / 20% 时各停一下，看停住时数字是不是也停住
+      const stops = [0.08, 0.14, 0.2];
+      const held = [];
+      let k = 0;
+      while (k < 1) {
+        k = Math.min(1, k + 0.006);
+        const p = pos(k);
+        await t('touchMove', p.x, p.y);
+        await sleep(16);
+        if (stops.length && (await oNow()) >= stops[0]) {
+          stops.shift();
+          await sleep(600);
+          const a = await riseNow();
+          await sleep(250);
+          const b = await riseNow();
+          held.push({ a, b });
+        }
+      }
+      await sleep(700);
+      // 掀到最大：每一位都升到位（没有变换、不透明），和原来的字重合
+      const rest = await page.evaluate((i) => {
+        const p = peels[i];
+        const d = p.reveal.debug();
+        const el = p.under.querySelector(`[data-peek="${d.heroKey}"]`);
+        const layer = el.querySelector(':scope > .peek-rise');
+        if (!layer) return { ok: false, why: 'no layer' };
+        const nodes = [...el.childNodes].filter((n) => n !== layer && n.nodeType === 3);
+        const wins = [...layer.children];
+        let j = 0;
+        let maxOff = 0;
+        const r = document.createRange();
+        for (const n of nodes) {
+          for (let q = 0; q < n.data.length; q++) {
+            r.setStart(n, q); r.setEnd(n, q + 1);
+            const a = r.getBoundingClientRect();
+            if (!wins[j] || !wins[j].firstChild) return { ok: false, why: `no glyph for character ${j}` };
+            const g = wins[j++].firstChild;
+            const r2 = document.createRange(); r2.selectNodeContents(g);
+            const b = r2.getBoundingClientRect();
+            maxOff = Math.max(maxOff, Math.abs(b.left - a.left), Math.abs(b.top - a.top), Math.abs(b.bottom - a.bottom));
+          }
+        }
+        const still = wins.every((w) => !w.firstChild.style.transform && !w.firstChild.style.opacity && getComputedStyle(w.firstChild).opacity === '1');
+        return { ok: true, text: d.rise.text, all: d.rise.glyphs.every((g) => g.p === 1), still, maxOff: +maxOff.toFixed(2), o: +d.o.toFixed(3), n: wins.length };
+      }, cs.stack);
+      if (name === 'clock-medium' && c === 'br') {
+        // 掀着的时候跨了一分钟（像 React 那样直接改字）：还没画下一帧，数字层就已经是新的字，而且直接是到位的（不滚）
+        const tick = await page.evaluate(async (i) => {
+          const p = peels[i];
+          const el = p.under.querySelector('[data-peek="time"]');
+          const node = [...el.childNodes].filter((n) => n.nodeType === 3).pop();
+          const old = node.data;
+          node.data = old === '59' ? '00' : String(+old + 1).padStart(2, '0');
+          await Promise.resolve(); // MutationObserver 在微任务里跑
+          const layer = el.querySelector(':scope > .peek-rise');
+          const own = [...el.childNodes].filter((n) => n !== layer).map((n) => n.textContent).join('');
+          const r = { own, layer: layer.textContent, risen: p.reveal.debug().rise.glyphs.every((g) => g.p === 1) };
+          node.data = old;
+          await Promise.resolve();
+          r.back = layer.textContent;
+          return r;
+        }, cs.stack);
+        check('digit rise: text changes mid-peel → layer rebuilt with the new characters before the next frame, already risen', tick.layer === tick.own && tick.risen && tick.back !== tick.layer, JSON.stringify(tick));
+      }
+      // 慢慢盖回去（很多小步），再松手
+      while (k > 0.05) {
+        k = Math.max(0.05, k - 0.008);
+        const p = pos(k);
+        await t('touchMove', p.x, p.y);
+        await sleep(16);
+      }
+      await t('touchEnd');
+      await page.waitForFunction((i) => peels[i].state === 'idle', cs.stack, { timeout: 5000 }).catch(() => {});
+      await sleep(60);
+      const S = await page.evaluate(() => { const S = window.__rise; S.on = false; return { frames: S.frames, layerFrames: S.layerFrames, bad: S.bad, texts: [...S.texts], partial: S.partial }; });
+      const lo = await leftovers(page, cs.stack);
+      const tag = `digit rise ${name} ${c}`;
+      check(`${tag}: every frame shows only the real characters in the right places`, S.layerFrames > 100 && S.layerFrames === S.frames && S.bad.length === 0 && S.texts.length >= 1 && S.texts.every((x) => shape.test(x)),
+        JSON.stringify({ frames: S.frames, layerFrames: S.layerFrames, texts: S.texts, bad: S.bad }));
+      check(`${tag}: scrubbed — digits pause when the finger pauses (±0.002), and were seen part-way`, held.length === 3 && held.every((h) => h.a && h.a.split(',').every((v, j) => Math.abs(+v - +h.b.split(',')[j]) <= 0.002)) && held.some((h) => h.a.split(',').some((v) => +v > 0 && +v < 1)) && S.partial > 0,
+        JSON.stringify(held));
+      check(`${tag}: fully peeled → all risen, at rest, on top of the original text (≤1px)`, rest.ok && rest.all && rest.still && rest.maxOff <= 1 && shape.test(rest.text), JSON.stringify(rest));
+      check(`${tag}: after release the layer and styles are gone`, lo.state === 'idle' && !lo.active && lo.bad.length === 0 && lo.overlays === 0, JSON.stringify(lo));
     }
   }
 
@@ -221,7 +361,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
       JSON.stringify({ a, b, lo }));
   }
 
-  // ================= 调参面板：风格切换、默认标记、数字滚动开关 =================
+  // ================= 调参面板：风格切换、默认标记、数字升起开关 =================
   {
     await page.evaluate(() => { document.getElementById('tunerOpen').click(); });
     await sleep(600);
@@ -236,8 +376,8 @@ const leftovers = (page, i) => page.evaluate((i) => {
     await t('touchStart', bb.x, bb.y); await sleep(30); await t('touchEnd'); await sleep(100);
     const after = await page.evaluate(() => ({ all: peels.every((p) => p.params.peekStyle === 'b'), saved: JSON.parse(localStorage.getItem(Tuner.STORE_KEY)).peekStyle, readout: [...document.querySelectorAll('.tn-row')].find((r) => r.querySelector('.tn-label').textContent === '信息怎么动').querySelector('.tn-value').textContent }));
     check('panel: tapping B 磁铁 switches every stack and is saved', after.all && after.saved === 'b' && after.readout === 'B 磁铁', JSON.stringify(after));
-    await page.evaluate(() => document.querySelector('.tn-switch[aria-label="数字滚动"]').click());
-    check('panel: 数字滚动 switch toggles peekRoll', await page.evaluate(() => peels.every((p) => p.params.peekRoll === false)));
+    await page.evaluate(() => document.querySelector('.tn-switch[aria-label="数字逐位升起"]').click());
+    check('panel: 数字逐位升起 switch toggles peekRoll', await page.evaluate(() => peels.every((p) => p.params.peekRoll === false)));
     await page.evaluate(() => { localStorage.setItem(Tuner.STORE_KEY, JSON.stringify({ peekStyle: 'zzz', peekScale: 9, hintOnLoad: false })); });
     await page.reload(); await sleep(700);
     const sane = await page.evaluate(() => [peel.params.peekStyle, peel.params.peekScale]);

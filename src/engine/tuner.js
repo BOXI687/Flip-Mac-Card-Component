@@ -149,8 +149,8 @@ const SECTIONS = [
         ],
       },
       {
-        key: 'peekRoll', label: '数字滚动', type: 'switch',
-        hint: '数字露出来时像里程表一样从 0 滚到真实数值，盖回去时滚回去',
+        key: 'peekRoll', label: '数字逐位升起', type: 'switch',
+        hint: '数字露出来时一位一位从下面升起来（每一位始终是正确的数字），盖回去时沉回去',
       },
       {
         key: 'peekResponse', label: '跟随速度',
