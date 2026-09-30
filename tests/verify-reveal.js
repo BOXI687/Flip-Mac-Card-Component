@@ -26,11 +26,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // 哪一叠、最上面放第几张，下面（被偷看的）才是想测的那种小组件
 const CASES = {
   'weather-medium': { stack: 0, id: 'stack', index: 1, label: '天气' },
-  'battery-small': { stack: 2, id: 'stackSmallB', index: 1, label: '电池' },
+  'battery-small': { stack: 2, id: 'stackSmallB', index: 0, label: '电池' },
   'clock-medium': { stack: 0, id: 'stack', index: 0, label: '世界时钟' },
   'weather-small': { stack: 1, id: 'stackSmallA', index: 0, label: '天气' },
-  'battery-medium': { stack: 0, id: 'stack', index: 5, label: '电池' },
-  'clock-small': { stack: 2, id: 'stackSmallB', index: 0, label: '世界时钟' },
+  'battery-medium': { stack: 0, id: 'stack', index: 2, label: '电池' },
+  'clock-small': { stack: 2, id: 'stackSmallB', index: 2, label: '世界时钟' },
 };
 
 async function setup(browser, extra = {}) {
@@ -334,7 +334,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
     const cs = CASES['weather-medium'];
     await prepare(page, cs, 'a'); // 中号最上面是世界时钟，下面是天气
     const B = await page.evaluate(() => { const r = document.getElementById('stack').getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; });
-    // 手指往上滑一张：最上面换成天气，下面是播客（没有说明 → 不动）
+    // 手指往上滑一张：最上面换成天气，下面绕回电池（换了一张下层卡 → 要重新量电池）
     const m = { x: B.l + B.w / 2, y: B.t + B.h / 2 };
     await t('touchStart', m.x, m.y);
     for (let k = 1; k <= 12; k++) { await t('touchMove', m.x, m.y - 110 * k / 12); await sleep(16); }
@@ -343,7 +343,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
     await t('touchStart', from.x, from.y);
     for (let k = 1; k <= 20; k++) { await t('touchMove', from.x - B.w * 0.5 * k / 20, from.y - B.h * 0.4 * k / 20); await sleep(16); }
     await sleep(300);
-    const a = await page.evaluate(() => ({ index: peel.index, under: peel.under.getAttribute('aria-label'), active: peel.reveal.active }));
+    const a = await page.evaluate(() => ({ index: peel.index, under: peel.under.getAttribute('aria-label'), active: peel.reveal.active, card: peel.reveal.card === peel.under, hero: peel.reveal.debug().heroKey }));
     await t('touchEnd'); await sleep(1300);
     // 往下滑回去两张：最上面是电池，下面是世界时钟（有说明 → 动）
     for (let n = 0; n < 2; n++) {
@@ -357,7 +357,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
     const b = await page.evaluate(() => ({ index: peel.index, under: peel.under.getAttribute('aria-label'), active: peel.reveal.active, card: peel.reveal.card === peel.under, hero: peel.reveal.debug().heroKey }));
     await t('touchEnd'); await sleep(1300);
     const lo = await leftovers(page, 0);
-    check('after swiping: peeking a widget without a spec moves nothing; swiping back measures the new under card', a.index === 2 && a.under === '播客·待播清单' && !a.active && b.index === 0 && b.under === '世界时钟' && b.active && b.card && b.hero === 'time' && lo.bad.length === 0,
+    check('after swiping: each peel measures the new under card (weather → battery, then battery → world clock)', a.index === 2 && a.under === '电池' && a.active && a.card && a.hero === 'pct' && b.index === 0 && b.under === '世界时钟' && b.active && b.card && b.hero === 'time' && lo.bad.length === 0,
       JSON.stringify({ a, b, lo }));
   }
 
