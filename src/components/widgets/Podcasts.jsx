@@ -21,12 +21,12 @@ function PodcastGlyph() {
 }
 
 /** 编出来的封面：只用色块和几何形状 */
-function Cover({ art }) {
+function Cover({ art, peek }) {
   const id = useId(); // 渐变的名字，全页面唯一
   if (art === 'dawn') {
     // 暖色：一轮太阳落在两道山坡后面
     return (
-      <svg className="pod__cover" viewBox="0 0 48 48" aria-hidden="true">
+      <svg className="pod__cover" viewBox="0 0 48 48" aria-hidden="true" data-peek={peek}>
         <defs>
           <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="#ffd9a8" />
@@ -42,7 +42,7 @@ function Cover({ art }) {
   }
   // 冷色：深色底上几条错开的弧线，像声波
   return (
-    <svg className="pod__cover" viewBox="0 0 48 48" aria-hidden="true">
+    <svg className="pod__cover" viewBox="0 0 48 48" aria-hidden="true" data-peek={peek}>
       <rect width="48" height="48" fill="#12202b" />
       <g fill="none" strokeWidth="3" strokeLinecap="round">
         <path d="M8 34a16 16 0 0 1 32 0" stroke="#3fd0c9" />
@@ -54,11 +54,11 @@ function Cover({ art }) {
 }
 
 /** 圆形播放按钮。progress（0~1）：听过的部分，按钮外面画一圈进度 */
-function PlayButton({ progress = 0 }) {
+function PlayButton({ progress = 0, peek }) {
   const r = 12.6;
   const c = 2 * Math.PI * r;
   return (
-    <span className="pod__play" aria-hidden="true">
+    <span className="pod__play" aria-hidden="true" data-peek={peek}>
       <svg viewBox="0 0 28 28">
         <circle cx="14" cy="14" r="14" className="pod__play-bg" />
         {progress > 0 && (
@@ -72,22 +72,61 @@ function PlayButton({ progress = 0 }) {
 }
 
 export default function Podcasts({ episodes }) {
+  const list = episodes.slice(0, 2);
+  // 偷看时的主角：听了一半的那集（最可能想接着听），没有就是第一集。
+  // 它的播放按钮、封面、标题带 data-peek（说明见文件最后的 Podcasts.peek）；
+  // 别的东西（头、另一集、那行灰字）只负责变淡（"rest"）
+  const hero = Math.max(0, list.findIndex((ep) => ep.progress > 0));
   return (
     <div className="pod">
-      <div className="pod__head">
+      <div className="pod__head" data-peek="rest">
         <span className="pod__title">待播清单</span>
         <PodcastGlyph />
       </div>
-      {episodes.slice(0, 2).map((ep, i) => (
-        <div key={ep.title} className={`pod__ep pod__ep--${i}`}>
-          <Cover art={ep.art} />
-          <div className="pod__text">
-            <div className="pod__ep-title">{ep.title}</div>
-            <div className="pod__meta">{ep.meta.join(' · ')}</div>
+      {list.map((ep, i) => {
+        const tag = (name) => (i === hero ? name : undefined);
+        return (
+          <div key={ep.title} className={`pod__ep pod__ep--${i}`} data-peek={i === hero ? undefined : 'rest'}>
+            <Cover art={ep.art} peek={tag('cover')} />
+            <div className="pod__text">
+              <div className="pod__ep-title" data-peek={tag('rest')}>{ep.title}</div>
+              <div className="pod__meta" data-peek={tag('rest')}>{ep.meta.join(' · ')}</div>
+              {/* 只在偷看时出现：同一个标题换成窄一点的两行（原来那一行太宽，口子里放不下），
+                  和灰字里最后一项（「还剩24分钟」/ 时长）。都从原来的位置「浮」出来 */}
+              {i === hero && (
+                <>
+                  <div className="pod__peek-title" data-peek="title" data-peek-only aria-hidden="true">{ep.title}</div>
+                  <div className="pod__peek-left" data-peek="left" data-peek-only aria-hidden="true">
+                    {ep.meta[ep.meta.length - 1]}
+                  </div>
+                </>
+              )}
+            </div>
+            <PlayButton progress={ep.progress} peek={tag('play')} />
           </div>
-          <PlayButton progress={ep.progress} />
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
+
+/*
+ * 掀开就聚拢（见 engine/reveal.js、CLAUDE.md）：偷看待播清单，最想要的是「接着听」—— 那集的播放按钮。
+ *   口子小 → 只有播放按钮 → 封面 + 播放按钮 → 再加这集的标题和「还剩24分钟」
+ *   播放按钮外面那圈进度是整个一起放大、淡入的（不会一点一点画出来，画到一半就是错的进度）
+ */
+Podcasts.peek = {
+  medium: {
+    hero: 'play',
+    layouts: [
+      'play',
+      { either: [{ row: ['cover', 'play'] }, { col: ['cover', 'play'] }] },
+      {
+        either: [
+          { row: [{ key: 'cover', scale: 0.8 }, { col: ['title', 'left'], gap: 0.3 }, 'play'], gap: 0.8 },
+          { col: [{ row: [{ key: 'cover', scale: 0.8 }, 'play'] }, 'title', 'left'], gap: 0.4 },
+        ],
+      },
+    ],
+  },
+};

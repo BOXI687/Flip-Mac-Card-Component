@@ -47,6 +47,9 @@ export const FITNESS = { move: 186, goal: 500, steps: 4218, distance: 1.9 };
 
 export const NOTES = ['周末买菜清单', '读书笔记', '旅行要带的东西'];
 
+// 日历：今天的一个日程（编的）。start / end 是「时:分」，每天都显示同一个
+export const EVENTS = [{ title: '设计评审', start: '14:00', end: '15:00' }];
+
 /*
  * 每一种小组件：
  *   kind  → 卡片的 CSS 类名（card--battery …），决定底色
@@ -61,7 +64,7 @@ const W = {
   podcasts: { kind: 'podcasts', label: '播客·待播清单', app: '播客', Widget: Podcasts, props: { episodes: EPISODES } },
   fitness: { kind: 'fitness', label: '健身·活动', app: '健身', Widget: Fitness, props: FITNESS },
   notes: { kind: 'notes', label: '备忘录', app: '备忘录', Widget: Notes, props: { notes: NOTES } },
-  calendar: { kind: 'calendar', label: '日历', app: '日历', Widget: Calendar, props: {} },
+  calendar: { kind: 'calendar', label: '日历', app: '日历', Widget: Calendar, props: { events: EVENTS } },
 };
 
 // 小号时钟只显示一个城市：左边那叠是伦敦，右边那叠是北京
@@ -73,9 +76,9 @@ const clockSmall = (city) => ({ ...W.clock, props: { cities: [city] } });
  * 播客、活动、备忘录、日历还在（W.podcasts / W.fitness / W.notes / W.calendar），想放回去就加进下面的数组
  */
 export const STACKS = {
-  medium: [W.battery, W.clock, W.weather],
-  smallA: [W.battery, W.weather, clockSmall(CITIES[3])],
-  smallB: [clockSmall(CITIES[0]), W.battery, W.weather],
+  medium: [W.clock, W.weather, W.podcasts, W.fitness, W.notes],
+  smallA: [W.calendar, W.battery],
+  smallB: [W.weather, clockSmall(CITIES[3])],
 };
 
 /**

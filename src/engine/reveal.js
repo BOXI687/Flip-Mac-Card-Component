@@ -126,10 +126,13 @@ export class Reveal {
     });
 
     // ---- 数字逐位升起（说明里的 roll 写的是哪个元素；名字沿用以前的「滚动」，存过的设置照样能用） ----
+    // 升起的不是主角（比如健身：主角是圆环，升起的是「186/500大卡」）时，它往往要到后面的座位表才出场：
+    // 这时升起跟着它自己「出场」的程度走（淡入到哪、升到哪），不然它还没露面，数字就已经升完了
     this.roll = null;
     this.rollOn = !!p.peekRoll;
-    const rollEl = spec.roll && this.byKey[spec.roll] && this.byKey[spec.roll].el;
-    if (this.rollOn && rollEl) this.roll = buildRise(rollEl);
+    this.rollItem = (spec.roll && this.byKey[spec.roll]) || null;
+    this.rollByPresence = !!this.rollItem && spec.roll !== this.heroKey;
+    if (this.rollOn && this.rollItem) this.roll = buildRise(this.rollItem.el);
     this.rollR = 0;
     this.rollV = 0;
 
@@ -196,10 +199,11 @@ export class Reveal {
       this.write(it);
     }
 
-    // 3) 数字逐位升起：跟着主角一起出发（同样的延迟），用一个不晃的弹簧（临界阻尼：跟得顺，不会冲过头）
+    // 3) 数字逐位升起：跟着主角（升起的不是主角时，跟着它自己）一起出发（同样的延迟），
+    //    用一个不晃的弹簧（临界阻尼：跟得顺，不会冲过头）
     if (this.roll) {
-      const hero = this.byKey[this.heroKey];
-      const target = this.sample(now - (hero ? hero.rank : 0) * stagger, -1);
+      const lead = this.rollByPresence ? this.rollItem : this.byKey[this.heroKey];
+      const target = this.sample(now - (lead ? lead.rank : 0) * stagger, -1);
       const w = (2 * Math.PI) / 0.35;
       const h = dt / 4;
       for (let s = 0; s < 4; s++) {
@@ -377,6 +381,7 @@ export class Reveal {
       return null;
     };
 
+    let rollSeat = 0; // 升起的元素（不是主角时）坐到座位上的程度
     const items = this.items.map((it) => {
       let x = 0;
       let y = 0;
@@ -399,10 +404,15 @@ export class Reveal {
       a += gh * it.homeA;
       // 换座位途中（两级座位表之间）的元素：快到位了才显现
       a = smooth(0.35, 1, a);
+      if (it === this.rollItem) rollSeat = e * a;
       // 刚开始掀：从原位慢慢走过来（e 从 0 到 1）
       return this.rel(it, lerp(it.home.x, x, e), lerp(it.home.y, y, e), lerp(1, s, e), lerp(it.homeA, a, e));
     });
-    return { items, roll: riseProgress(o) };
+    // 升起的不是主角：升起的进度不超过它在座位上「出场」了多少（只算座位上的透明度，
+    // 不算刚开始掀时它在原位慢慢变淡的那一段 —— 那时数字先沉着，等它坐到座位上再升起来）
+    let roll = riseProgress(o);
+    if (this.rollByPresence) roll = Math.min(roll, clamp(rollSeat, 0, 1));
+    return { items, roll };
   }
 
   /** 测试和控制台用：现在每个元素的状态 */
