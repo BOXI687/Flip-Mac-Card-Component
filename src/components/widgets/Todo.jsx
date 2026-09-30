@@ -29,21 +29,41 @@ export default function Todo() {
   const { todos } = useStory();
   const shown = todos.slice(0, VISIBLE);
   const more = todos.length - shown.length;
+  // 偷看时要动的元素带 data-peek（说明见文件最后的 Todo.peek）：每条待办的字（t1 t2 t3）、「还有 1 项」、标题行。
+  // 标的是字（span），不是整行 li：行里的空心圆、行之间的细线留在原地，圆只负责变淡（"rest"）
   return (
     <div className="todo">
-      <div className="todo__head">
+      <div className="todo__head" data-peek="head">
         <ListGlyph />
         <span>待办</span>
       </div>
       <ul className="todo__list">
         {shown.map((t, i) => (
           <li key={t} className={i === 0 ? 'todo__item todo__item--first' : 'todo__item'}>
-            <i className="todo__box" />
-            <span className="todo__text">{t}</span>
+            <i className="todo__box" data-peek="rest" />
+            <span className="todo__text" data-peek={`t${i + 1}`}>{t}</span>
           </li>
         ))}
       </ul>
-      {more > 0 && <p className="todo__more">还有 {more} 项</p>}
+      {more > 0 && <p className="todo__more" data-peek="more">还有 {more} 项</p>}
     </div>
   );
 }
+
+/*
+ * 掀开就聚拢（见 engine/reveal.js、CLAUDE.md）：日历在上面时偷看待办，最想知道的是「会前还要做完什么」。
+ *   口子小 → 只有最紧急的第一条「会前改完首页稿」
+ *         → 再加第二条（小一点：0.85）
+ *         → 前三条（后两条 0.8）
+ *   小号的口子很小（最多掀 65%），三条字已经是极限：「还有 1 项」和标题行「待办」放不下，和空心圆一起只负责变淡
+ */
+Todo.peek = {
+  small: {
+    hero: 't1',
+    layouts: [
+      't1',
+      { col: ['t1', { key: 't2', scale: 0.85 }], gap: 0.3 },
+      { col: ['t1', { key: 't2', scale: 0.8 }, { key: 't3', scale: 0.8 }], gap: 0.3 },
+    ],
+  },
+};

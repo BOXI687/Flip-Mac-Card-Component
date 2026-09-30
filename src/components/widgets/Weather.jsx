@@ -252,8 +252,8 @@ export default function Weather({ size = 'medium', data }) {
           {city}
           <div className="wx__temp" data-peek="temp">{temp}°</div>
         </div>
-        {/* 「16:00 起有雨」：温度右边的空位。偷看时只变淡（"rest"） */}
-        <div className="wx__rain" data-peek="rest">
+        {/* 「16:00 起有雨」：温度右边的空位。偷看时它是主角（地图在上面时，最想知道的是「要不要带伞」） */}
+        <div className="wx__rain" data-peek="rain">
           <WxIcon kind="rain" className="wx__rain-icon" />
           {rain.hint}
         </div>
@@ -280,10 +280,27 @@ export default function Weather({ size = 'medium', data }) {
  * 掀开就聚拢（见 engine/reveal.js、CLAUDE.md）：掀起上面那张卡时，天气卡上的信息怎么挤进口子里。
  *   上面 JSX 里带 data-peek="…" 的元素就是这里说的名字。
  *   roll     哪个元素的数字会「逐位升起」（名字是以前「数字滚动」时起的，沿用）
- *   layouts  座位表：口子从小到大依次用 —— 先只有温度 → 温度 + 图标 + 天气 → 再加最高/最低。
- *            不在座位表里的元素（城市、逐小时预报）留在原位、变淡
+ *   layouts  座位表：口子从小到大依次用。不在座位表里的元素（城市、逐小时预报）留在原位、变淡
+ *
+ * 中号（和地图配成一对，地图在上面）：出门前最想知道的是「几点开始下雨」，现在的温度状态栏、窗外都能看到。
+ *   口子小 → 「🌧 18:00 起有雨」（钟点一位一位升起，「起有雨」不动）
+ *         → 它（放大到 1.3 倍，还是最大的那一行）下面再加一行「28° ☀ 晴朗」（温度缩到 0.45，不抢主角）
+ *         → 再加最高/最低（0.7），主角 1.5 倍
+ *   中号的口子是横着长的（宽的东西「贵」），所以后两级都是往下加一行，而不是往右排；
+ *   主角跟着一级比一级大，三级才不会挤在差不多的口子大小上一起换（地图也是这样）
+ * 小号（现在不在任何一叠里）：还是原来的 温度 → 温度 + 图标 + 天气 → 再加最高/最低
  */
-const PEEK = {
+const NOW = { row: [{ key: 'temp', scale: 0.45 }, 'icon', 'cond'] }; // 「28° ☀ 晴朗」一行
+const PEEK_MEDIUM = {
+  hero: 'rain',
+  roll: 'rain',
+  layouts: [
+    'rain',
+    { col: [{ key: 'rain', scale: 1.3 }, NOW], gap: 0.4 },
+    { col: [{ key: 'rain', scale: 1.5 }, NOW, { key: 'hl', scale: 0.7 }], gap: 0.4 },
+  ],
+};
+const PEEK_SMALL = {
   roll: 'temp',
   layouts: [
     'temp',
@@ -292,4 +309,4 @@ const PEEK = {
     { either: [{ col: [{ row: ['temp', 'icon', 'cond'] }, 'hl'] }, { col: ['temp', { row: ['icon', 'cond'] }, 'hl'] }] },
   ],
 };
-Weather.peek = { medium: PEEK, small: PEEK };
+Weather.peek = { medium: PEEK_MEDIUM, small: PEEK_SMALL };

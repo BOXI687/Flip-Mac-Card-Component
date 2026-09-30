@@ -4,15 +4,17 @@
  *   (cd dist && python3 -m http.server 8780) &
  *   PORT=8780 node tests/verify-reveal.js
  *
- * 天气（中号）、电池 / 设备电量（小号）、日历（小号）× 四个角（这三种是现在叠里有「掀开就聚拢」说明的）：
+ * 三叠里的六张卡都有「掀开就聚拢」说明，每一张在「另一张」下面时（天气、设备电量、日历 × 四个角；
+ * 地图、待办、健身小号 × br、tl 两个角）：
  *   - 慢慢掀的时候，主角每一帧的位置是连续的（没有突然跳一下）
  *   - 停住以后，主角的中心在露出来的口子里、是正的（没有歪、没有镜像）、看得见
- *   - 掀到最大：数字逐位升起全部到位，显示的是真实数值
+ *   - 掀到最大：数字逐位升起全部到位，显示的是真实数值（有升起数字的卡，br、tl）
  *   - 松手盖回：下面那张卡上所有改过的样式都清掉了（transform / opacity / 数字升起那一层）
- * 数字逐位升起（修「15:96」那种错数字）：天气 °、设备电量 %、日历的时间各两个角，慢慢掀、中途停三次、慢慢盖回，
+ * 数字逐位升起（修「15:96」那种错数字）：地图的到达时间、天气的「几点起有雨」、日历的倒计时、健身的「还差 314 大卡」、
+ *   设备电量的 % 各两个角，慢慢掀、中途停三次、慢慢盖回，
  *   每一帧都检查：数字层里每一位都是真实数值里那个位置上的字，没有多余的字；原来的字是透明的（不会叠两层）；
- *   停住时数字也停住；掀到最大时每一位都升到位，和原来的字重合（差不到 1px）。
- * 还没有说明的新卡（地图、待办、健身小号）在下面时：什么都不动（第一阶段没写它们的说明，第二阶段加上后这一段要改成正式的检查）。
+ *   停住时数字也停住；掀到最大时每一位都升到位，和原来的字重合（差不到 1px）；汉字（「到」「分钟后」）一直在原位。
+ *   日历、地图（br）：掀着的时候真的过了一分钟（倒计时、到达时间变了），数字层马上是新的字。
  * 另外：面板里关掉「掀开时信息聚拢」时什么都不动；系统「减弱动态效果」时什么都不动；换了一张卡再掀，量的是新的那张；
  * 面板的开关、旧存档（A / B / 关）的换算；没有 console 报错。
  * （世界时钟、播客、备忘录、健身中号、电池中号现在不在任何一叠里，不测；它们的说明还在代码里。）
@@ -28,14 +30,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // 哪一叠、最上面放第几张，下面（被偷看的 = 下一张，最后一张的下一张绕回第一张）才是想测的那种小组件。
 // 现在的叠法（src/data.js 的 STACKS）：每叠一对
 //   中号 [地图, 天气]；左边小号 [日历, 待办]；右边小号 [健身, 设备电量]
-// roll = 这种小组件有「数字逐位升起」；nospec = 这张卡还没有「掀开就聚拢」说明（应该不动）
+// roll = 这种小组件有「数字逐位升起」；hero = 主角的名字（说明改了会报出来）
 const CASES = {
-  'weather-medium': { stack: 0, id: 'stack', index: 0, label: '天气', roll: true },
-  'calendar-small': { stack: 1, id: 'stackSmallA', index: 1, label: '日历', roll: true },
-  'battery-small': { stack: 2, id: 'stackSmallB', index: 0, label: '设备电量', roll: true },
-  'map-medium': { stack: 0, id: 'stack', index: 1, label: '地图', nospec: true },
-  'todo-small': { stack: 1, id: 'stackSmallA', index: 0, label: '待办', nospec: true },
-  'fitness-small': { stack: 2, id: 'stackSmallB', index: 1, label: '健身·活动', nospec: true },
+  'weather-medium': { stack: 0, id: 'stack', index: 0, label: '天气', roll: true, hero: 'rain' },
+  'calendar-small': { stack: 1, id: 'stackSmallA', index: 1, label: '日历', roll: true, hero: 'count' },
+  'battery-small': { stack: 2, id: 'stackSmallB', index: 0, label: '设备电量', roll: true, hero: 'pct' },
+  'map-medium': { stack: 0, id: 'stack', index: 1, label: '地图', roll: true, hero: 'arrive' },
+  'todo-small': { stack: 1, id: 'stackSmallA', index: 0, label: '待办', hero: 't1' },
+  'fitness-small': { stack: 2, id: 'stackSmallB', index: 1, label: '健身·活动', roll: true, hero: 'left' },
 };
 
 async function setup(browser, extra = {}) {
@@ -124,10 +126,10 @@ const leftovers = (page, i) => page.evaluate((i) => {
   const browser = await chromium.launch();
   const { ctx, page, errs, t } = await setup(browser);
 
-  // ================= 三种有说明的小组件 × 四个角 =================
-  for (const name of ['weather-medium', 'battery-small', 'calendar-small']) {
+  // ================= 六张卡：前三种 × 四个角，后三种（第二阶段新加的）× br、tl =================
+  for (const name of Object.keys(CASES)) {
     const cs = CASES[name];
-    for (const c of ['tl', 'tr', 'br', 'bl']) {
+    for (const c of ['map-medium', 'todo-small', 'fitness-small'].includes(name) ? ['tl', 'br'] : ['tl', 'tr', 'br', 'bl']) {
       const B = await prepare(page, cs);
       const from = corners(B)[c];
       const mid = { x: B.l + B.w / 2, y: B.t + B.h / 2 };
@@ -145,7 +147,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
       const sJump = Math.max(0, ...trace.slice(1).map((r, k) => Math.abs(r[2] - trace[k][2])));
       check(`${name} ${c}: hero moves continuously while peeling`, trace.length > 30 && jump < 6 && sJump < 0.08,
         `${trace.length} frames, max step ${Math.max(0, ...v).toFixed(1)}px, max step change ${jump.toFixed(1)}px, max scale step ${sJump.toFixed(3)}`);
-      check(`${name} ${c}: paused mid-peel → hero inside the opening, upright, visible`, h.active && h.inside && h.upright && h.opacity > 0.9 && h.scale > 0.35,
+      check(`${name} ${c}: paused mid-peel → hero inside the opening, upright, visible`, h.active && h.key === cs.hero && h.inside && h.upright && h.opacity > 0.9 && h.scale > 0.35,
         JSON.stringify({ key: h.key, o: h.o, c: h.c, rot: h.rot, scale: h.scale, opacity: h.opacity }));
       // 再往外拖到最大：数字逐位升起全部到位
       const far = { x: mid.x + (mid.x - from.x) * 1.4, y: mid.y + (mid.y - from.y) * 1.4 };
@@ -165,29 +167,19 @@ const leftovers = (page, i) => page.evaluate((i) => {
     }
   }
 
-  // ================= 还没有说明的新卡（地图、待办、健身小号）：在下面时什么都不动 =================
-  for (const name of ['map-medium', 'todo-small', 'fitness-small']) {
-    for (const c of ['tl', 'br']) {
-      const cs = CASES[name];
-      const B = await prepare(page, cs);
-      const from = corners(B)[c];
-      const mid = { x: B.l + B.w / 2, y: B.t + B.h / 2 };
-      await t('touchStart', from.x, from.y);
-      for (let k = 1; k <= 24; k++) { await t('touchMove', from.x + (mid.x - from.x) * k / 24, from.y + (mid.y - from.y) * k / 24); await sleep(16); }
-      await sleep(400);
-      const r = await page.evaluate((i) => { const p = peels[i]; return { state: p.state, active: p.reveal.active, styled: [...p.under.querySelectorAll('[data-peek]')].filter((e) => e.getAttribute('style')).length, rise: p.under.querySelectorAll('.peek-rise').length }; }, cs.stack);
-      await t('touchEnd');
-      await page.waitForFunction((i) => peels[i].state === 'idle', cs.stack, { timeout: 5000 }).catch(() => {});
-      await sleep(60);
-      const lo = await leftovers(page, cs.stack);
-      check(`${name} ${c}: no peek spec yet → the under card stays still (nothing styled), nothing left after release`, r.state === 'dragging' && !r.active && r.styled === 0 && r.rise === 0 && lo.bad.length === 0 && !lo.active && lo.overlays === 0, JSON.stringify({ r, lo }));
-    }
-  }
-
   // ================= 数字逐位升起：每一帧看到的都是正确的字 =================
-  // 天气 °、设备电量 %、日历的时间 × 两个角；慢慢掀（很多小步）、停三次、慢慢盖回、松手
-  // 升起的是说明里 roll 写的那个元素（stopsAt：主角不是 roll 的元素时，要在它出场的那一段停，现在三种都不需要）
-  const RISE_CASES = [['weather-medium', /^\d+°$/], ['battery-small', /^\d+%$/], ['calendar-small', /^\d\d:\d\d$/]];
+  // 地图的到达时间、天气的「几点起有雨」、日历的倒计时、健身的「还差 … 大卡」、设备电量 % × 两个角；
+  // 慢慢掀（很多小步）、停三次、慢慢盖回、松手
+  // 升起的是说明里 roll 写的那个元素（stopsAt：主角不是 roll 的元素时，要在它出场的那一段停，现在都不需要）
+  const RISE_CASES = [
+    ['map-medium', /^\d\d:\d\d 到$/],
+    ['weather-medium', /^\d\d:00 起有雨$/],
+    ['calendar-small', /^\d+ 分钟后$/],
+    ['fitness-small', /^还差 \d+ 大卡$/],
+    ['battery-small', /^\d+%$/],
+  ];
+  // 真的过一分钟用的：和 setup() 里冻住的时间一样
+  const T0 = new Date('2026-09-28T15:02:10+08:00');
   for (const [name, shape, stopsAt] of RISE_CASES) {
     for (const c of ['br', 'tl']) {
       const cs = CASES[name];
@@ -218,6 +210,8 @@ const leftovers = (page, i) => page.evaluate((i) => {
                 if (w.childNodes.length !== 1 || w.firstChild.childNodes.length !== 1 || w.textContent !== chars[j]) err(`glyph ${j} is "${w.textContent}", real "${chars[j]}"`);
                 const op = +getComputedStyle(w.firstChild).opacity;
                 if (op > 0.02 && op < 0.98) S.partial++;
+                // 汉字、空格是标签，不升：一直在原位（没有变换、不透明）
+                if (/[\s\u3000-\u9fff]/.test(chars[j]) && (w.firstChild.style.transform || w.firstChild.style.opacity)) err(`label "${chars[j]}" moved`);
               });
               // 原来的字必须是透明的，否则会和数字层叠成两层
               if (!/rgba\(.*, 0\)|transparent/.test(getComputedStyle(el).color)) err(`original text visible (${getComputedStyle(el).color})`);
@@ -285,11 +279,11 @@ const leftovers = (page, i) => page.evaluate((i) => {
         const still = wins.every((w) => !w.firstChild.style.transform && !w.firstChild.style.opacity && getComputedStyle(w.firstChild).opacity === '1');
         return { ok: true, text: d.rise.text, all: d.rise.glyphs.every((g) => g.p === 1), still, maxOff: +maxOff.toFixed(2), o: +d.o.toFixed(3), n: wins.length };
       }, cs.stack);
-      if (name === 'calendar-small' && c === 'br') {
-        // 会议的开始时间在掀着的时候变了（比如跨过整点 / 半点，故事换了下一场）（像 React 那样直接改字）：还没画下一帧，数字层就已经是新的字，而且直接是到位的（不滚）
+      if ((name === 'calendar-small' || name === 'map-medium') && c === 'br') {
+        // 1) 字在掀着的时候变了（像 React 那样直接改字）：还没画下一帧，数字层就已经是新的字，而且直接是到位的（不滚）
         const tick = await page.evaluate(async (i) => {
           const p = peels[i];
-          const el = p.under.querySelector('[data-peek="time"]');
+          const el = p.under.querySelector(`[data-peek="${p.reveal.spec.roll}"]`);
           const node = [...el.childNodes].filter((n) => n.nodeType === 3 && n.data.trim()).pop();
           const old = node.data;
           const last = old.slice(-1);
@@ -303,7 +297,22 @@ const leftovers = (page, i) => page.evaluate((i) => {
           r.back = layer.textContent;
           return r;
         }, cs.stack);
-        check('digit rise: text changes mid-peel → layer rebuilt with the new characters before the next frame, already risen', tick.layer === tick.own && tick.risen && tick.back !== tick.layer, JSON.stringify(tick));
+        check(`digit rise ${name}: text changes mid-peel → layer rebuilt with the new characters before the next frame, already risen`, tick.layer === tick.own && tick.risen && tick.back !== tick.layer, JSON.stringify(tick));
+        // 2) 真的过了一分钟（时钟往后拨）：React 自己改了倒计时 / 到达时间，数字层跟着是新的值（每一帧的检查也一直在跑）
+        const before = await page.evaluate((i) => peels[i].reveal.debug().rise.text, cs.stack);
+        await page.clock.setFixedTime(new Date(T0.getTime() + 60 * 1000));
+        await page.waitForFunction(({ i, before }) => peels[i].reveal.debug().rise.text !== before, { i: cs.stack, before }, { timeout: 3000 }).catch(() => {});
+        await sleep(100);
+        const after = await page.evaluate((i) => {
+          const p = peels[i];
+          const el = p.under.querySelector(`[data-peek="${p.reveal.spec.roll}"]`);
+          const layer = el.querySelector(':scope > .peek-rise');
+          const own = [...el.childNodes].filter((n) => n !== layer).map((n) => n.textContent).join('');
+          return { own, layer: layer.textContent, risen: p.reveal.debug().rise.glyphs.every((g) => g.p === 1) };
+        }, cs.stack);
+        await page.clock.setFixedTime(T0);
+        await page.waitForFunction(({ i, before }) => peels[i].reveal.debug().rise.text === before, { i: cs.stack, before }, { timeout: 3000 }).catch(() => {});
+        check(`digit rise ${name}: a real minute passes mid-peel → the risen number shows the new value`, after.own !== before && after.layer === after.own && after.risen && shape.test(after.own), JSON.stringify({ before, after }));
       }
       // 慢慢盖回去（很多小步），再松手
       while (k > 0.05) {
@@ -345,7 +354,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
     const cs = CASES['weather-medium'];
     await prepare(page, cs); // 中号最上面是地图，下面是天气
     const B = await page.evaluate(() => { const r = document.getElementById('stack').getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; });
-    // 手指往上滑一张：最上面换成天气，下面绕回地图（没有说明的卡 → 这一叠的聚拢要停下来，不能还在量天气）
+    // 手指往上滑一张：最上面换成天气，下面绕回地图（量的要是地图，不能还在量天气）
     const m = { x: B.l + B.w / 2, y: B.t + B.h / 2 };
     await t('touchStart', m.x, m.y);
     for (let k = 1; k <= 12; k++) { await t('touchMove', m.x, m.y - 110 * k / 12); await sleep(16); }
@@ -354,9 +363,9 @@ const leftovers = (page, i) => page.evaluate((i) => {
     await t('touchStart', from.x, from.y);
     for (let k = 1; k <= 20; k++) { await t('touchMove', from.x - B.w * 0.5 * k / 20, from.y - B.h * 0.4 * k / 20); await sleep(16); }
     await sleep(300);
-    const a = await page.evaluate(() => ({ index: peel.index, under: peel.under.getAttribute('aria-label'), active: peel.reveal.active, styled: [...peel.under.querySelectorAll('[data-peek]')].filter((e) => e.getAttribute('style')).length }));
+    const a = await page.evaluate(() => ({ index: peel.index, under: peel.under.getAttribute('aria-label'), active: peel.reveal.active, card: peel.reveal.card === peel.under, hero: peel.reveal.debug().heroKey }));
     await t('touchEnd'); await sleep(1300);
-    // 往下滑回去一张：最上面又是地图，下面是天气（有说明 → 动，量的是天气）
+    // 往下滑回去一张：最上面又是地图，下面是天气（量的是天气）
     await t('touchStart', m.x, m.y);
     for (let k = 1; k <= 12; k++) { await t('touchMove', m.x, m.y + 110 * k / 12); await sleep(16); }
     await t('touchEnd'); await sleep(1000);
@@ -366,7 +375,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
     const b = await page.evaluate(() => ({ index: peel.index, under: peel.under.getAttribute('aria-label'), active: peel.reveal.active, card: peel.reveal.card === peel.under, hero: peel.reveal.debug().heroKey }));
     await t('touchEnd'); await sleep(1300);
     const lo = await leftovers(page, 0);
-    check('after swiping: each peel measures the new under card (天气 on top → 地图 has no spec, stays still; back to 地图 on top → 天气 moves)', a.index === 1 && a.under === '地图' && !a.active && a.styled === 0 && b.index === 0 && b.under === '天气' && b.active && b.card && b.hero === 'temp' && lo.bad.length === 0,
+    check('after swiping: each peel measures the new under card (天气 on top → 地图 moves, hero arrive; back to 地图 on top → 天气 moves, hero rain)', a.index === 1 && a.under === '地图' && a.active && a.card && a.hero === 'arrive' && b.index === 0 && b.under === '天气' && b.active && b.card && b.hero === 'rain' && lo.bad.length === 0,
       JSON.stringify({ a, b, lo }));
   }
 

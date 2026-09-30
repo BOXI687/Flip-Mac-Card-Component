@@ -418,6 +418,13 @@
   bottom: calc(var(--u) * 8);
   width: calc(var(--u) * 152);
   padding: calc(var(--u) * 11) calc(var(--u) * 13);
+  isolation: isolate; /* 深色底（z-index -1）只垫在面板自己的字下面，不会跑到街道图后面去 */
+}
+/* 面板的深色底：单独一个元素（偷看时它只负责变淡，字可以走开，见 Map.jsx） */
+.map__panel-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   border-radius: calc(var(--u) * 19);
   background: rgba(28, 29, 33, 0.94);
 }
@@ -723,18 +730,43 @@
   right: 0;
   top: calc(50% - 0.55em);
   text-align: center;
+  font-size: calc(var(--u) * 18); /* 比中号的 21 小一点：小号的口子很小，数字小一点才能早一些放下圆环 */
 }
-/* 日历：大号的开始时间，从日程卡里那行小时间（顶 132.5、行高 15）的中间出发，蓝色 */
-.cal__peek-time {
+.battery__pct--low { color: var(--red); } /* ≤ 20%：和圆环一样是红色 */
+/* 日历：倒计时「42 分钟后」，数字 24 半粗、「分钟后」13（和日程名字差不多大），都是蓝色；
+ * 从日程卡的中间（顶 113.5、高 38.5 → 中心 132.75）出发 */
+.cal__peek-count {
   left: calc(var(--u) * 19);
-  top: calc(var(--u) * 140 - 0.5em);
+  top: calc(var(--u) * 132.75 - 0.5em);
   margin: 0;
-  font-size: calc(var(--u) * 22);
+  font-size: calc(var(--u) * 24);
   line-height: 1;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
   color: var(--cal-accent);
+}
+.cal__peek-count small { font-size: calc(var(--u) * 13); font-weight: 600; letter-spacing: 0; }
+/* 地图：大号的到达时间「09:34 到」，从「现在出发，09:34 到」那一行（面板顶 67、行高 15）出发，白色；
+ * 「到」字小一号（和 22 分钟的「分钟」一样 15）。「路上 22 分钟」和「去公司」一样大，灰色，从大号的 22 那里出发 */
+.map__panel .map__peek-arrive {
+  left: calc(var(--u) * 13);
+  top: calc(var(--u) * 74.5 - 0.5em);
+  font-size: calc(var(--u) * 28);
+  line-height: 1;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+.map__peek-arrive small { font-size: calc(var(--u) * 15); font-weight: 600; letter-spacing: 0; }
+.map__panel .map__peek-trip {
+  left: calc(var(--u) * 13);
+  top: calc(var(--u) * 38);
+  font-size: calc(var(--u) * 13);
+  line-height: calc(var(--u) * 16);
+  font-weight: 600;
+  color: rgba(235, 235, 245, 0.68);
 }
 /* 播客：标题的两行版（和原标题一样的字，只是窄一点、折成两行），和原标题左上角对齐；
  * 「还剩24分钟」和那行灰字一样大，贴着那行灰字的底 */

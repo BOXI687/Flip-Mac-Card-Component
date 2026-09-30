@@ -15,7 +15,7 @@ export default function Calendar() {
   const now = useNow();
   const { weekday, meeting } = useStory();
   // 偷看时（掀开上面那张卡）要动的元素都带 data-peek（说明见文件最后的 Calendar.peek）：
-  // 日期、星期、日程名字、偷看时才出现的大号时间；「今天」标签、描边的框、原来那行小时间只负责变淡（"rest"）。
+  // 偷看时才出现的倒计时「还有 42 分钟」、日程名字、那行小时间；日期、星期、「今天」标签、描边的框只负责变淡。
   // 描边的框是单独一个空元素（.cal__event），名字和时间放在它上面而不是它里面：
   // 这样框变淡时不会把里面正在移动的名字也一起变淡（父子不能同时打标记）
   return (
@@ -25,28 +25,36 @@ export default function Calendar() {
       <p className="cal__section" data-peek="rest">{meeting.dayLabel}</p>
       <i className="cal__event" data-peek="rest" />
       <p className="cal__title" data-peek="title">{meeting.title}</p>
-      <p className="cal__time" data-peek="rest">
+      <p className="cal__time" data-peek="time">
         {meeting.startText} – {meeting.endText}
       </p>
-      {/* 只在偷看时出现：大号的开始时间（从原来那行小时间的位置「浮」出来） */}
-      <p className="cal__peek-time" data-peek="time" data-peek-only aria-hidden="true">
-        {meeting.startText}
+      {/* 只在偷看时出现：倒计时「42 分钟后」（42 是大号的数字，从日程卡的中间「浮」出来）。
+          比「还有 42 分钟」短两个字：小号的口子很小，字越少，能放得越大。
+          每分钟跟着真实时间变（42 → 41 …），掀着的时候变了，升起的那一层马上换成新的数字 */}
+      <p className="cal__peek-count" data-peek="count" data-peek-only aria-hidden="true">
+        {meeting.minutesLeft}
+        <small> 分钟后</small>
       </p>
     </div>
   );
 }
 
 /*
- * 掀开就聚拢（见 engine/reveal.js、CLAUDE.md）：偷看日历，最想知道的是「下一个日程几点」。
- *   口子小 → 只有大号时间（数字一位一位升起）→ 时间 + 日程名字 → 再加今天几号和星期
+ * 掀开就聚拢（见 engine/reveal.js、CLAUDE.md）：待办在上面时偷看日历，最想知道的是「离开会还有多久」
+ * （几点几分状态栏上就有，但「还有 42 分钟」要自己算）。
+ *   口子小 → 只有倒计时「42 分钟后」（42 一位一位升起，「分钟后」不动）
+ *         → 倒计时 + 日程名字「设计站会」
+ *         → 再加时间「16:00 – 16:30」（0.85，小号的口子放不下原大）
+ *   日期、星期、「今天」标签、描边的框：变淡
  */
 Calendar.peek = {
   small: {
-    roll: 'time',
+    hero: 'count',
+    roll: 'count',
     layouts: [
-      'time',
-      { either: [{ row: ['time', 'title'] }, { col: ['time', 'title'] }] },
-      { col: ['time', 'title', { row: [{ key: 'date', scale: 0.45 }, { key: 'week', scale: 0.7 }] }], gap: 0.35 },
+      'count',
+      { col: ['count', 'title'], gap: 0.35 },
+      { col: ['count', 'title', { key: 'time', scale: 0.85 }], gap: 0.35 },
     ],
   },
 };

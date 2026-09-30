@@ -46,8 +46,7 @@ function ActivityRing({ move, goal }) {
 
 export default function Fitness({ size = 'medium', move, goal, steps, distance }) {
   if (size === 'small') {
-    // 小号：圆环 + 两行字。这一版还没有「掀开就聚拢」的说明（Fitness.peek 只有 medium），
-    // 掀开它上面那张卡时它会保持不动；标记（ring / move / left）先打好了，方便以后加
+    // 小号：圆环 + 两行字。偷看时要动的三样都带 data-peek（说明见文件最后的 Fitness.peek.small）
     return (
       <div className="fit fit--small">
         <ActivityRing move={move} goal={goal} />
@@ -93,7 +92,28 @@ export default function Fitness({ size = 'medium', move, goal, steps, distance }
  *   口子小 → 只有圆环 → 圆环 + 「186/500大卡」（数字一位一位升起）→ 再加步数、距离
  *   圆环整个一起放大、淡入，不会一点一点画出来（画到一半就是错的进度）
  */
+/*
+ * 小号（和设备电量配成一对，设备电量在上面）：偷看健身，最有用的是「今天还差多少」——
+ * 圆环一眼看出进度，「还差 314 大卡」告诉你还要动多少。
+ *   口子小 → 只有「还差 314 大卡」（314 一位一位升起，「还差」「大卡」不动）
+ *         → 上面再加一个小圆环（0.35）：一眼看出今天的进度
+ *         → 再加红色的「186/500大卡」（0.5，快掀到最大时才放得下）
+ *   小号的口子很小：圆环和字一起挤在最小的口子里，字只有 8～9 px，所以最小的口子只放字
+ *   圆环整个一起缩放、淡入，不会一点一点画出来
+ */
+const RING_SM = { key: 'ring', scale: 0.35 };
+const PEEK_SMALL = {
+  hero: 'left',
+  roll: 'left',
+  layouts: [
+    'left',
+    { col: [RING_SM, 'left'], gap: 0.3 },
+    { col: [RING_SM, 'left', { key: 'move', scale: 0.5 }], gap: 0.3 },
+  ],
+};
+
 Fitness.peek = {
+  small: PEEK_SMALL,
   medium: {
     hero: 'ring',
     roll: 'move',

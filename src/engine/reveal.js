@@ -41,6 +41,9 @@ const ENGAGE = [0.015, 0.2]; // 掀开面积（占上限的比例）从 1.5% 到
 const RISE = [0.06, 0.36]; // 数字逐位升起：掀开 6% 开始升，36% 时每一位都到位（主角大约 15%~20% 才在口子里看得清，升起的过程要留给看得见的这一段）
 const RISE_STAGGER = 0.3; // 后一位比前一位晚多少才开始升（按一位自己升起的那一段算：0.3 = 前一位升到 30% 时后一位出发）
 const RISE_FADE = 0.45; // 每一位在升起的前 45% 里从透明变到不透明（主要靠「从下面露出来」，淡入只是让边缘柔一点）
+// 升起的只是「数」（数字和贴着它的 : % ° / 这些符号）；汉字和空格是「标签」（还有、分钟、起有雨、到……），
+// 一直停在原位不升：看起来像「还差 ___ 大卡」里的空格被数字一位一位填上
+const RISE_STILL = /[\s\u3000-\u9fff\uf900-\ufaff\uff00-\uffef]/;
 const HISTORY_EXTRA = 40; // 出发间隔的历史记录多留几毫秒
 
 /** 系统设置里打开了「减弱动态效果」：信息不动（和面板里关掉「掀开时信息聚拢」一样） */
@@ -518,6 +521,7 @@ function visualRect(el, r) {
  * 在元素里面盖一层：原来的每一个字（数字、°、%、: 都算）各放进一个小「窗口」，
  * 窗口和那个字原来占的地方一样大（用 Range 一个字一个字量出来），窗口下沿以下的部分被裁掉。
  * 字在窗口里从下面（往下挪一整个字高）升到原位：还没升起来时它藏在窗口下沿下面，看不见。
+ * 汉字和空格（「还有」「分钟」「起有雨」这种标签）也各有窗口，但一直停在原位不升，只有数字一位一位升起来。
  * 每一位从头到尾都是它自己那个正确的字，所以不管拖到哪、停在哪，看到的都不会是错的数字。
  * 原来的字变透明（还在，占着位置，读屏也还读它）。这一层不归 React 管；
  * 数值变了（比如跨了一分钟）就马上用新的字重新搭一次（不会从旧数值「滚」到新数值）。
@@ -615,7 +619,8 @@ function buildRise(el) {
         }
         win.append(g);
         layer.append(win);
-        glyphs.push({ g, win, ch, h, x: (r.left - er.left) * k, y: (r.top - er.top) * k, p: 0, written: '' });
+        const still = RISE_STILL.test(ch); // 汉字、空格：不升，一直在原位
+        glyphs.push({ g, win, ch, h, x: (r.left - er.left) * k, y: (r.top - er.top) * k, p: still ? 1 : 0, still, written: '' });
       }
     }
     // 对齐：单独摆的字和原来一整串里的字，排版上会差零点几 px（字距微调 kerning、行高取整）。
@@ -642,10 +647,12 @@ function buildRise(el) {
       else if (r < 0.001) r = 0;
       if (Math.abs(r - last) < 1e-4) return;
       last = r;
-      const n = glyphs.length;
-      const span = 1 + RISE_STAGGER * (n - 1);
-      glyphs.forEach((gl, j) => {
-        const q = clamp(r * span - RISE_STAGGER * j, 0, 1); // 这一位自己的进度
+      // 只有要升的字排队（汉字、空格不占位置：数字之间不会因为隔着一个字多等一段）
+      const n = glyphs.filter((gl) => !gl.still).length;
+      const span = 1 + RISE_STAGGER * Math.max(0, n - 1);
+      let j = 0;
+      glyphs.forEach((gl) => {
+        const q = gl.still ? 1 : clamp(r * span - RISE_STAGGER * j++, 0, 1); // 这一位自己的进度
         gl.p = q;
         let key;
         let tf = '';

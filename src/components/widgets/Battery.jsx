@@ -67,10 +67,12 @@ const BOLT_AT = 'translate(26 -5.5)'; // 放到圆环顶上居中
 
 /**
  * hero：这是不是电量最低的那个设备。掀开上面那张卡时，它的圆环、图标、百分比会挤进口子里
- *   （data-peek 标出来，说明写在文件最后的 Battery.peek）；别的设备整个标成 "rest"，只负责变淡。
- *   小号平时不写百分比，但偷看时要看到数字，所以给它藏一个只在偷看时出现的百分比（data-peek-only）
+ *   （data-peek 标出来，说明写在文件最后的 Battery.peek）；别的设备整个标成 other1、other2 …
+ *   （小号口子够大时它们缩小了跟过来，中号只负责变淡）。
+ *   小号平时不写百分比，但偷看时要看到数字，所以给它藏一个只在偷看时出现的百分比（data-peek-only），
+ *   电量低（≤ 20%）时是红色，和圆环一样
  */
-function BatteryRing({ device, withPct, hero }) {
+function BatteryRing({ device, withPct, hero, other }) {
   // 遮罩要有一个全页面唯一的名字（id）。不能几个圆环共用一个：浏览器只认页面里第一个同名的，
   // 要是第一个恰好在一张藏起来的卡片里，所有用它的圆环都会一起消失。useId() 给每个组件一个不重复的名字
   const notchId = useId();
@@ -78,7 +80,7 @@ function BatteryRing({ device, withPct, hero }) {
   const offset = RING_C * (1 - device.level / 100);
   const color = device.level <= 20 ? 'var(--red)' : 'var(--green)';
   return (
-    <div className="battery__item" data-peek={hero ? undefined : 'rest'}>
+    <div className="battery__item" data-peek={hero ? undefined : `other${other}`}>
       <div className="ring">
         <svg className="ring__svg" viewBox="0 0 64 64" aria-hidden="true" data-peek={hero ? 'ring' : undefined}>
           {device.charging && (
@@ -102,7 +104,9 @@ function BatteryRing({ device, withPct, hero }) {
       </div>
       {withPct && <div className="battery__pct" data-peek={hero ? 'pct' : undefined}>{device.level}%</div>}
       {!withPct && hero && (
-        <div className="battery__pct battery__pct--peek" data-peek="pct" data-peek-only aria-hidden="true">{device.level}%</div>
+        <div className={`battery__pct battery__pct--peek${device.level <= 20 ? ' battery__pct--low' : ''}`} data-peek="pct" data-peek-only aria-hidden="true">
+          {device.level}%
+        </div>
       )}
     </div>
   );
@@ -116,17 +120,22 @@ export default function Battery({ size = 'medium', devices }) {
   return (
     <div className={`battery battery--${size}`}>
       {list.map((d, i) => (
-        <BatteryRing key={d.icon} device={d} withPct={!small} hero={i === lowest} />
+        // other：不是最低的那些设备排第几（1、2 …），偷看时用来分别找到它们
+        <BatteryRing key={d.icon} device={d} withPct={!small} hero={i === lowest} other={i < lowest ? i + 1 : i} />
       ))}
     </div>
   );
 }
 
 /*
- * 掀开就聚拢（见 engine/reveal.js、CLAUDE.md）：电量最低的设备挤进口子里。
- *   口子小 → 图标 + 百分比；口子大 → 圆环（图标在圆环里）+ 百分比；其它设备留在原位、变淡
+ * 掀开就聚拢（见 engine/reveal.js、CLAUDE.md）：电量最低的设备挤进口子里（设备电量小号：手表 18%）。
+ * 手机自己的电量状态栏上就有，这里没有手机；偷看时最有用的是「哪个设备快没电了」。
+ *   口子小 → 图标 + 百分比（红色，数字一位一位升起）
+ *         → 圆环（图标在圆环里，一起缩小一点）+ 百分比
+ *         → 小号：再加另外两个设备的圆环（缩到 0.4，排在下面一行）
+ *   中号（现在不在任何一叠里）只有前两级，其它设备留在原位、变淡
  */
-const PEEK = {
+const PEEK_MEDIUM = {
   hero: 'pct', // 主角（不写的话 = 第一张座位表里的第一个元素）
   roll: 'pct',
   layouts: [
@@ -134,4 +143,15 @@ const PEEK = {
     { either: [{ row: [{ over: ['ring', 'icon'] }, 'pct'] }, { col: [{ over: ['ring', 'icon'] }, 'pct'] }] },
   ],
 };
-Battery.peek = { medium: PEEK, small: PEEK };
+// 小号：圆环 56 比中号大，和百分比排在一起时缩到 0.6（不然口子要掀得很大才放得下）
+const RING = { over: [{ key: 'ring', scale: 0.6 }, { key: 'icon', scale: 0.6 }] };
+const PEEK_SMALL = {
+  hero: 'pct',
+  roll: 'pct',
+  layouts: [
+    { either: [{ row: ['icon', 'pct'], gap: 0.4 }, { col: ['icon', 'pct'], gap: 0.4 }] },
+    { either: [{ row: [RING, 'pct'], gap: 0.4 }, { col: [RING, 'pct'], gap: 0.4 }] },
+    { col: [RING, 'pct', { row: [{ key: 'other1', scale: 0.4 }, { key: 'other2', scale: 0.4 }], gap: 0.4 }], gap: 0.4 },
+  ],
+};
+Battery.peek = { medium: PEEK_MEDIUM, small: PEEK_SMALL };
