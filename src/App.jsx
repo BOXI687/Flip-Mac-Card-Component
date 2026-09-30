@@ -1,12 +1,17 @@
 /*
- * App.jsx —— 整个页面：像 iPhone 主屏幕一样，上面一个中号叠放，下面一行两个小号叠放
+ * App.jsx —— 整个页面：假装是一块真的 iPhone 主屏幕
+ *
+ * 从上到下：一个中号叠放 → 一行两个小号叠放 → 一排 4 个 App 图标 → 「搜索」小胶囊 → 程序坞（4 个图标）。
+ * 页面上没有任何「原型」的痕迹（没有说明文字、没有调参按钮）：
+ * 调参面板藏起来了，长按壁纸空白处约 0.9 秒打开（engine/tuner.js 里的「长按壁纸」）。
  *
  * 每一叠都是一个 <PeelStack>，各有各的引擎，互不影响；调参面板的参数对所有叠都生效。
- * 叠里放哪几张、什么内容，都在 data.js 里改。
+ * 叠里放哪几张、什么内容，主屏幕上放哪些图标，都在 data.js 里改。
  */
 import { useEffect, useRef } from 'react';
 import PeelStack from './components/PeelStack.jsx';
-import { STACKS } from './data.js';
+import AppIcon from './components/AppIcon.jsx';
+import { STACKS, HOME_APPS } from './data.js';
 import { Tuner } from './engine/tuner.js';
 
 // 版本标签：A / B 版本在 index.html 的 <html data-variant-label> 里写上名字，页面顶部会显示，免得看混
@@ -15,7 +20,6 @@ const VARIANT_LABEL = document.documentElement.dataset.variantLabel;
 export default function App() {
   const engines = useRef({}); // 三叠的引擎，由 <PeelStack> 装好后交过来
   const homeRef = useRef(null);
-  const openBtnRef = useRef(null);
   const keep = (id) => (engine) => {
     engines.current[id] = engine;
   };
@@ -62,8 +66,8 @@ export default function App() {
     home.addEventListener('transitionrun', onRun);
     home.addEventListener('transitionend', onEnd);
 
-    // 2. 调参面板：会先把上次调好的参数装回来，所以要在「首次提示」之前
-    const tuner = Tuner.attach(peel, smallPeels, { openBtn: openBtnRef.current, home });
+    // 2. 调参面板：会先把上次调好的参数（包括壁纸）装回来，所以要在「首次提示」之前
+    const tuner = Tuner.attach(peel, smallPeels, { home });
     // 面板在电脑上默认开着（不播动画地把内容推到左边），推完再对齐一次壁纸
     syncWallpaper();
     let raf = requestAnimationFrame(() => (raf = requestAnimationFrame(syncWallpaper)));
@@ -73,6 +77,7 @@ export default function App() {
 
     window.peel = peel; // 方便在控制台里玩：peel.peek('tl')、peel.swiper
     window.peels = all; // 所有叠（测试用）
+    window.tuner = tuner; // 控制台里 tuner.open() 也能打开面板（测试也用）
 
     return () => {
       clearTimeout(hint);
@@ -97,21 +102,28 @@ export default function App() {
         </div>
       </div>
 
-      <p className="hint">
-        上下滑动换一张小组件
-        <br />
-        按住任意一角拖动，偷看下一张，松手自动盖回
-      </p>
+      {/* 一排 App 图标：和小组件对齐的 4 列（尺寸、间距见 style.css「App 图标」） */}
+      <div className="apps">
+        {HOME_APPS.grid.map((a) => (
+          <AppIcon key={a.app} {...a} />
+        ))}
+      </div>
 
-      {/* 调参面板的入口：面板本身由 engine/tuner.js 生成 */}
-      <button className="tuner-open" id="tunerOpen" type="button" ref={openBtnRef}>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 7h9M17 7h3M4 17h3M11 17h9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          <circle cx="15" cy="7" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
-          <circle cx="9" cy="17" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
-        </svg>
-        调参
-      </button>
+      {/* 屏幕最下面：「搜索」小胶囊 + 程序坞。margin-top: auto 把它们推到底 */}
+      <div className="dock-area">
+        <div className="search-pill" role="img" aria-label="搜索">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="6.8" cy="6.8" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.9" />
+            <path d="M10.3 10.3 L 14 14" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+          </svg>
+          搜索
+        </div>
+        <div className="dock">
+          {HOME_APPS.dock.map((a) => (
+            <AppIcon key={a.app} {...a} showName={false} />
+          ))}
+        </div>
+      </div>
     </main>
   );
 }

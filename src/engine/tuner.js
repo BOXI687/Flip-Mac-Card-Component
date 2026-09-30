@@ -11,6 +11,11 @@
  *
  * 这个面板没有改写成 React：它是一整块自己管自己的界面，用原来的写法（直接造 DOM 元素）
  * 最稳。App.jsx 在页面画好以后调用 attach() 把它「装」上去，页面卸载时调用 destroy() 拆掉。
+ *
+ * 入口是藏起来的（页面要像一块真的 iPhone 主屏幕，不能有「调参」按钮）：
+ *   长按壁纸的空白处约 0.9 秒 → 打开（手机：从下面滑上来；电脑：右边的侧边栏，再长按一次收起）。
+ *   电脑上侧边栏第一次打开页面时默认开着，收起过就记住。
+ *   「空白处」= 不是小组件、App 图标、搜索、程序坞、面板本身的地方，所以不会和掀角、上下滑抢手势。
  */
 import { PeelStack } from './peel.js';
 
@@ -22,6 +27,11 @@ const SIDE_KEY = 'peel-tuner-sidebar';
 // 宽屏（电脑、横放的 iPad）用右侧边栏，窄屏（手机）用底部面板。
 // 和 style.css 里「宽屏：调参面板变成右侧边栏」那段的 900px 是同一条分界线，改的话两边一起改
 const WIDE_QUERY = '(min-width: 900px)';
+// 长按多久算「长按」、手指挪多远就不算了（和 iOS 主屏幕长按差不多：按住不动约一秒）
+const LONG_PRESS_MS = 900;
+const LONG_PRESS_SLOP = 10;
+// 这些东西上面按住不算「按在壁纸上」
+const NOT_WALLPAPER = '.widget, .app, .search-pill, .dock, .tn-sheet, .variant-tag, button, input, textarea';
 const pct = (v) => `${Math.round(v * 100)}%`;
 
 // ================= 面板上有哪些控件 =================
@@ -178,6 +188,21 @@ const SECTIONS = [
     ],
   },
   {
+    title: '主屏幕',
+    items: [
+      {
+        key: 'wallpaper', label: '壁纸', type: 'wallpaper',
+        hint: '主屏幕的背景。电池小组件的玻璃、程序坞和搜索框会跟着一起变',
+        // value 写进 <html data-wallpaper>；每张壁纸的样子在 style.css 开头「壁纸」那一节
+        options: [
+          { name: '橄榄', value: 'olive' },
+          { name: '夜幕', value: 'dusk' },
+          { name: '晨光', value: 'dawn' },
+        ],
+      },
+    ],
+  },
+  {
     title: '其他',
     items: [
       {
@@ -227,6 +252,8 @@ function loadSaved(defaults) {
       out[ctl.key] = Math.min(ctl.max, Math.max(ctl.min, v));
     } else if (ctl.type === 'color') {
       if (/^#[0-9a-f]{6}$/i.test(v)) out[ctl.key] = v;
+    } else if (ctl.type === 'wallpaper') {
+      if (ctl.options.some((o) => o.value === v)) out[ctl.key] = v; // 不认识的壁纸名：当作没存过
     } else {
       out[ctl.key] = v;
     }
@@ -457,20 +484,44 @@ function buildColor(ctl, api) {
   };
 }
 
+/** 壁纸：几张竖长的小预览图（直接用壁纸本身的 CSS 画，见 style.css 的 .wp-olive 等） */
+function buildWallpaper(ctl, api) {
+  const row = h('div', 'tn-swatches');
+  const btns = ctl.options.map((o) => {
+    const b = h('button', `tn-swatch tn-swatch--wp wp-${o.value}`);
+    b.type = 'button';
+    b.setAttribute('aria-label', o.name);
+    if (o.value === api.defaultOf(ctl.key)) b.classList.add('is-default');
+    b.append(h('span', 'tn-swatch__name', o.name));
+    b.addEventListener('click', () => api.set(ctl, o.value));
+    row.append(b);
+    return b;
+  });
+  ctl.show = (v) => (ctl.options.find((o) => o.value === v) || {}).name || v;
+  return {
+    nodes: [row],
+    render: (v) => btns.forEach((b, i) => b.classList.toggle('is-selected', ctl.options[i].value === v)),
+  };
+}
+
 // ================= 面板本体 =================
 /**
  * peel：主要那一叠（中号），面板上的数值以它为准；
  * others：其它叠（小号），同样的参数也同步给它们，一处调、处处生效
- * dom.openBtn：页面上的「调参」按钮；dom.home：内容区（侧边栏打开时它让出位置）
- * 返回的对象里有 destroy()：把面板和所有监听都拆掉
+ * dom.home：内容区（侧边栏打开时它让出位置；长按它的空白处打开面板）
+ * 返回的对象里有 open() / close() / destroy()（destroy 把面板和所有监听都拆掉）
  */
 function attach(peel, others = [], dom = {}) {
   const defaults = PeelStack.DEFAULTS;
   const group = [peel, ...others];
-  const setAll = (patch) => group.forEach((s) => s.setParams(patch));
+  const root = document.documentElement;
+  const setAll = (patch) => {
+    group.forEach((s) => s.setParams(patch));
+    // 壁纸不是翻角的参数，但和别的参数一起存、一起复制；这里把它交给 CSS（<html data-wallpaper>）
+    root.dataset.wallpaper = peel.params.wallpaper;
+  };
   setAll(loadSaved(defaults)); // 先把上次调的值装上，再做首次提示
 
-  const openBtn = dom.openBtn || document.getElementById('tunerOpen');
   const cleanups = []; // 拆面板时要做的事，一件件记下来
   const listen = (target, type, fn, opts) => {
     target.addEventListener(type, fn, opts);
@@ -544,7 +595,9 @@ function attach(peel, others = [], dom = {}) {
           ? buildSwitch(ctl, api)
           : ctl.type === 'color'
             ? buildColor(ctl, api)
-            : buildSlider(ctl, api);
+            : ctl.type === 'wallpaper'
+              ? buildWallpaper(ctl, api)
+              : buildSlider(ctl, api);
       let value = null;
       if (built.head) rowHead.append(built.head);
       else {
@@ -679,8 +732,6 @@ function attach(peel, others = [], dom = {}) {
   function setOpen(open, remember) {
     sheet.classList.toggle('is-open', open);
     sheet.setAttribute('aria-hidden', open ? 'false' : 'true');
-    openBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    // 注意类名不能和按钮的 .tuner-open 重名，否则 body 会套上按钮的样式
     document.body.classList.toggle('is-tuning', open);
     if (!open) manual.classList.remove('is-visible');
     if (remember && isWide()) saveSideOpen(open);
@@ -695,7 +746,7 @@ function attach(peel, others = [], dom = {}) {
     sheet.setAttribute('role', wide ? 'complementary' : 'dialog');
     closeBtn.textContent = wide ? '收起' : '完成';
     sub.textContent = wide
-      ? '一边拖左边的卡片，一边调，改动马上生效'
+      ? '一边拖左边的卡片，一边调，改动马上生效。收起后，长按壁纸空白处再打开'
       : '一边拖上面的卡片，一边调，改动马上生效';
     if (wide) {
       // 电脑上默认开着：侧边栏不挡卡片，调参是来这里的主要目的；用户收起过就记住
@@ -724,30 +775,63 @@ function attach(peel, others = [], dom = {}) {
     if (e.target === home) group.forEach((s) => s.measure());
   });
 
-  // 「调参」按钮：宽屏上是开关（再点一下收起），手机上面板会盖住它，只管打开
-  listen(openBtn, 'click', () => setOpen(!isOpen(), true));
   closeBtn.addEventListener('click', () => setOpen(false, true));
   // 手机上点面板外面的空白处关闭 —— 但点卡片不关（开着面板拖卡片正是用法）。
-  // 侧边栏不压内容，点页面别处不收起，要收起就点「收起」或「调参」
+  // 侧边栏不压内容，点页面别处不收起，要收起就点「收起」或再长按一次壁纸
   listen(
     document,
     'pointerdown',
     (e) => {
       if (!isOpen() || isWide()) return;
       const t = e.target;
-      if (sheet.contains(t) || openBtn.contains(t) || group.some((s) => s.el.parentElement.contains(t))) return;
+      if (sheet.contains(t) || group.some((s) => s.el.parentElement.contains(t))) return;
       setOpen(false, false);
     },
     true
   );
 
+  // ---- 隐藏入口：长按壁纸空白处 ----
+  // 按下时开始计时；手指挪开超过 10px、松手、第二根手指按下、切到别的 App，都算取消。
+  // 小组件、图标、程序坞上按下根本不计时，所以和掀角、上下滑不会抢
+  let press = null;
+  const cancelPress = () => {
+    if (press) clearTimeout(press.timer);
+    press = null;
+  };
+  const onWallpaper = (t) => t instanceof Element && home.contains(t) && !t.closest(NOT_WALLPAPER);
+  listen(document, 'pointerdown', (e) => {
+    cancelPress();
+    if (!e.isPrimary || e.button > 0 || !onWallpaper(e.target)) return; // 右键、第二根手指：不算
+    press = {
+      id: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      timer: setTimeout(() => {
+        press = null;
+        // 电脑上侧边栏不挡内容，长按是开关；手机上只管打开（面板开着时按壁纸会先把它关掉）
+        setOpen(isWide() ? !isOpen() : true, true);
+      }, LONG_PRESS_MS),
+    };
+  });
+  listen(document, 'pointermove', (e) => {
+    if (press && e.pointerId === press.id && Math.hypot(e.clientX - press.x, e.clientY - press.y) > LONG_PRESS_SLOP) cancelPress();
+  });
+  const endPress = (e) => press && e.pointerId === press.id && cancelPress();
+  listen(document, 'pointerup', endPress);
+  listen(document, 'pointercancel', endPress);
+  listen(window, 'blur', cancelPress);
+  // 安卓 / 电脑右键：在壁纸上长按不弹出系统菜单（iOS 的长按菜单已经在 style.css 里关掉了）
+  listen(document, 'contextmenu', (e) => onWallpaper(e.target) && e.preventDefault());
+
   function destroy() {
+    cancelPress();
     cleanups.forEach((fn) => fn());
     clearTimeout(zonesTimer);
     clearTimeout(toastTimer);
     sheet.remove();
     zones.remove();
     document.body.classList.remove('is-tuning', 'tn-instant');
+    delete root.dataset.wallpaper;
   }
 
   return { open: () => setOpen(true, true), close: () => setOpen(false, true), refresh: refreshAll, destroy };

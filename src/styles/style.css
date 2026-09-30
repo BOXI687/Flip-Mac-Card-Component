@@ -26,6 +26,16 @@
   --name-h: calc(var(--u) * 14); /* 名字一行高 14（设计稿：12pt / 行高 14） */
   /* 整个小组件区域的高度：调参面板（手机上）要停在它下面 */
   --screen-h: calc(var(--widget-h) + var(--row-gap) + var(--small-w) + var(--name-gap) + var(--name-h));
+  /* 第一排小组件离屏幕顶边多远。真 iPhone 上顶部是状态栏（系统自己画，网页不画），
+     中号小组件的顶边在「状态栏安全区 + 9」（MEASURED：Boxi 的截图，402pt 宽的 iPhone，安全区 62、顶边 71）。
+     没有安全区的地方（电脑、Safari 里）至少留 68，看起来和手机上一样 */
+  --home-top: max(calc(env(safe-area-inset-top) + 9px), 68px);
+
+  /* App 图标、搜索、程序坞（MEASURED：Boxi 的主屏幕截图，402pt 宽的 iPhone，按 --u 换算到别的宽度）：
+     图标 64、圆角约 14；4 列和小组件左右对齐（两边各缩进 3）；
+     程序坞 高 98、比小组件两边各宽 12、离屏幕底 17、圆角约 32；搜索胶囊 高 30，离程序坞 18 */
+  --icon: calc(var(--u) * 64);
+  --dock-pad: calc(var(--u) * 17);
 
   --green: #30d158;
   --red: #ff453a;
@@ -49,16 +59,61 @@ html, body, #root {
   overscroll-behavior: none; /* 禁止 iOS 橡皮筋回弹 */
 }
 
-/* 壁纸的底色。html 也要涂上：万一哪里没盖到，露出来的也是同一个颜色，而不是一条色带 */
+/* ================= 壁纸（3 张，全用 CSS 渐变画，不用图片：没有版权问题，也几乎不占流量） =================
+ * 选哪张由 <html data-wallpaper="…"> 决定（调参面板「壁纸」设置它，engine/tuner.js）。
+ * 每张壁纸只定义三个变量：
+ *   --wallpaper        底色
+ *   --wallpaper-light  底色上面的光影（一组渐变）
+ *   --glass-tint       电池组件「假玻璃」上压的那层暗色（不同壁纸深浅不同，白字才看得清）
+ * 电池组件的「玻璃」里会再画一份同样的壁纸（见 .card--battery），所以换壁纸时它自动跟着换；
+ * 程序坞和搜索胶囊用真的背景模糊（backdrop-filter），也自动跟着换。
+ * 同样的变量也挂在 .wp-olive / .wp-dusk / .wp-dawn 这几个类上：调参面板里的小预览图直接用它们画，
+ * 所以预览和真壁纸永远是同一份。
+ * html 也涂上底色：万一哪里没盖到，露出来的也是同一个颜色，而不是一条色带 */
 html { background: var(--wallpaper); }
-:root {
+
+/* (a) 橄榄（默认，原来那张）：左上角一片亮光，右下角轻轻压暗 */
+:root,
+.wp-olive {
   --wallpaper: #9b9978;
-  /* 壁纸上的光影。单独写成变量，因为电池组件的「玻璃」里要再画一份（见 .card--battery） */
   --wallpaper-light:
     /* 左上角的亮光 */
     radial-gradient(120% 70% at 15% 0%, rgba(214, 212, 176, 1) 0%, rgba(214, 212, 176, 0) 60%),
     /* 右下角轻轻压暗一点：以前这里是很深的颜色，在手机上看像一块黑斑，现在淡很多、铺得更开 */
     radial-gradient(130% 70% at 100% 100%, rgba(120, 118, 90, 0.45) 0%, rgba(120, 118, 90, 0) 75%);
+  --glass-tint: rgba(38, 36, 24, 0.36);
+}
+
+/* (b) 夜幕：深蓝夜空，屏幕下半部有一团暖橙色的光（像 Boxi 自己主屏幕的那种感觉，但是完全重新画的）。
+   从上往下：顶上偏青的深蓝 → 中间一团琥珀色的光 → 左下角一抹橙红 → 最底下几乎全黑 */
+:root[data-wallpaper="dusk"],
+.wp-dusk {
+  --wallpaper: #0c1422;
+  --wallpaper-light:
+    /* 中间偏下那片琥珀色的光（最亮的地方在屏幕 68% 高）：横向铺得很开、边缘很软，像失焦的灯光，不是一个圆球 */
+    radial-gradient(120% 30% at 50% 68%, rgba(222, 164, 106, 0.62) 0%, rgba(190, 122, 70, 0.3) 40%, rgba(150, 90, 50, 0) 100%),
+    /* 再铺一层更大更淡的暖光，让亮光慢慢过渡到上面的深蓝 */
+    radial-gradient(170% 48% at 50% 72%, rgba(128, 78, 44, 0.4) 0%, rgba(90, 56, 36, 0) 100%),
+    /* 左下角的橙红 */
+    radial-gradient(60% 24% at 4% 86%, rgba(214, 84, 36, 0.85) 0%, rgba(170, 60, 26, 0) 100%),
+    /* 右边一点点暖褐色，让光不是孤零零的一团 */
+    radial-gradient(55% 22% at 96% 76%, rgba(150, 96, 56, 0.45) 0%, rgba(120, 70, 40, 0) 100%),
+    /* 整体的明暗：顶部青蓝 → 中间深蓝 → 底部黑 */
+    linear-gradient(180deg, #13263a 0%, #0d1a2c 30%, #111a28 55%, #1a1410 80%, #050303 100%);
+  --glass-tint: rgba(8, 12, 22, 0.42);
+}
+
+/* (c) 晨光：iOS 默认壁纸那种柔和的多色渐变（珊瑚、橘黄、玫瑰、天蓝交融），颜色够深，白字看得清 */
+:root[data-wallpaper="dawn"],
+.wp-dawn {
+  --wallpaper: #c77a92;
+  --wallpaper-light:
+    radial-gradient(80% 45% at 8% 6%, rgba(255, 150, 112, 0.95) 0%, rgba(255, 150, 112, 0) 100%),
+    radial-gradient(75% 45% at 100% 22%, rgba(110, 150, 236, 0.9) 0%, rgba(110, 150, 236, 0) 100%),
+    radial-gradient(90% 40% at 0% 62%, rgba(236, 110, 150, 0.85) 0%, rgba(236, 110, 150, 0) 100%),
+    radial-gradient(85% 45% at 100% 78%, rgba(255, 176, 92, 0.9) 0%, rgba(255, 176, 92, 0) 100%),
+    radial-gradient(90% 35% at 30% 104%, rgba(124, 92, 196, 0.8) 0%, rgba(124, 92, 196, 0) 100%);
+  --glass-tint: rgba(60, 24, 44, 0.3);
 }
 
 body {
@@ -95,12 +150,12 @@ body::before {
 
 .home {
   position: relative; /* 版本标签按内容区定位：侧边栏打开时也居中在卡片上方 */
-  min-height: 100%;
+  height: 100%; /* 正好一屏：程序坞贴着屏幕底，不滚动 */
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 28px;
-  padding: calc(env(safe-area-inset-top) + 80px) 16px calc(env(safe-area-inset-bottom) + 24px);
+  /* 顶上：状态栏的位置空出来（真 iPhone 自己画）；底下：程序坞自己留边（见 .dock-area） */
+  padding: var(--home-top) 16px 0;
 }
 
 /* ================= 主屏幕排版 =================
@@ -209,13 +264,13 @@ body::before {
  * 在卡片里再画一份壁纸，位置和屏幕对齐（App.jsx 算好 --wp-x / --wp-y；上下滑时 swipe.js 会跟着改），再压一层暗色让白字看得清。
  * 壁纸是很柔的渐变，所以不用再模糊
  */
-:root { --glass-tint: rgba(38, 36, 24, 0.36); }
 .card--battery {
   --card-bg: #6b6951; /* 没有壁纸位置信息时的后备色 */
   background-color: var(--wallpaper);
+  /* 暗色那层也按壁纸的大小、位置铺：每张壁纸的渐变层数不一样，所有层用同一个尺寸、位置最省事 */
   background-image: linear-gradient(var(--glass-tint), var(--glass-tint)), var(--wallpaper-light);
-  background-size: 100% 100%, var(--wp-w, 100vw) var(--wp-h, 100vh), var(--wp-w, 100vw) var(--wp-h, 100vh);
-  background-position: 0 0, var(--wp-x, 0px) var(--wp-y, 0px), var(--wp-x, 0px) var(--wp-y, 0px);
+  background-size: var(--wp-w, 100vw) var(--wp-h, 100vh);
+  background-position: var(--wp-x, 0px) var(--wp-y, 0px);
   background-repeat: no-repeat;
 }
 
@@ -307,35 +362,111 @@ body::before {
 .show-debug .peel-debug { display: block; }
 .show-debug .card { outline: 1px dashed rgba(255, 255, 255, 0.5); }
 
-/* ================= 页面其它部分 ================= */
-.hint {
-  margin: 0;
-  text-align: center;
-  font-size: 13px;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.82);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-  transition: opacity 0.3s;
+/* ================= App 图标 =================
+ * 一排 4 个，和小组件的左右边对齐（两边各缩进 3pt，MEASURED），离上面那排小组件的距离和两排小组件之间一样。
+ * 图标下面的名字和小组件的名字同一个样式（Apple 设计稿里两者是同一种文字） */
+.apps {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  width: var(--widget-w);
+  margin-top: calc(var(--row-gap) - var(--name-gap) - var(--name-h));
+  padding: 0 calc(var(--u) * 3);
 }
-.is-tuning .hint { opacity: 0; } /* 底部面板打开时藏起说明文字，免得从半透明面板后面透出来 */
-
-.tuner-open {
-  margin-top: auto;
-  display: inline-flex;
+.app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 10px 18px 10px 14px;
-  font: 500 15px var(--font);
-  color: #fff;
-  background: rgba(0, 0, 0, 0.25);
-  border: 0;
-  border-radius: 999px;
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
+  gap: var(--name-gap);
+  width: var(--icon);
 }
-.tuner-open svg { width: 20px; height: 20px; }
-.tuner-open:active { background: rgba(0, 0, 0, 0.4); }
+.app__icon {
+  display: block;
+  width: var(--icon);
+  height: var(--icon);
+  /* 很淡的投影：图标像是轻轻浮在壁纸上（INFERRED） */
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.14));
+  transition: filter 0.2s ease-out;
+}
+/* 按下时：和 iOS 一样变暗一点（不放大，也不跳转）；松手后 0.2 秒亮回来 */
+.app:active .app__icon {
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.14)) brightness(0.72);
+  transition: none;
+}
+.app__name {
+  margin: 0;
+  height: var(--name-h);
+  font-size: calc(var(--u) * 12);
+  line-height: var(--name-h);
+  font-weight: 510;
+  text-shadow: 0 2px 25px #000; /* 和小组件的名字一样：很散的一圈黑影，远看几乎没有，但浅色壁纸上字不会糊 */
+  white-space: nowrap;
+}
+
+/* ================= 搜索胶囊 + 程序坞 =================
+ * margin-top: auto：把这一块推到屏幕最底下（中间的空白和真 iPhone 一样是空着的壁纸）。
+ * 两个都是「玻璃」：真的背景模糊（backdrop-filter）。这里可以用，因为它们下面只有壁纸，
+ * 不像小组件那样叠着别的卡片 */
+.dock-area {
+  flex: none;
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 18);
+  /* 程序坞离屏幕底 17。有 Home 横条安全区（34）时，程序坞下沿在安全区中间，和真 iPhone 一样 */
+  padding-bottom: max(calc(var(--u) * 17), calc(env(safe-area-inset-bottom) - 17px));
+}
+.search-pill {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 4);
+  height: calc(var(--u) * 30);
+  padding: 0 calc(var(--u) * 12) 0 calc(var(--u) * 10);
+  font-size: calc(var(--u) * 13);
+  font-weight: 590;
+  letter-spacing: 0.01em; /* 玻璃上的小字稍微放开一点，更清楚 */
+  color: rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  backdrop-filter: blur(16px) saturate(1.6);
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.35), inset 0 0 0 0.5px rgba(255, 255, 255, 0.12);
+}
+.search-pill svg {
+  width: calc(var(--u) * 12);
+  height: calc(var(--u) * 12);
+}
+.dock {
+  display: flex;
+  justify-content: space-between;
+  /* 比小组件两边各宽 12；图标和上面那排同一列（左右内边距 = 12 + 3） */
+  width: calc(var(--widget-w) + var(--u) * 24);
+  padding: var(--dock-pad) calc(var(--u) * 15);
+  border-radius: calc(var(--u) * 32);
+  /* iOS 26 以后的程序坞是一块「液态玻璃」：很淡的白 + 背景模糊 + 提亮，边缘一圈亮线（上边更亮，像光打在玻璃边上） */
+  background: rgba(255, 255, 255, 0.13);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  backdrop-filter: blur(24px) saturate(1.8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.16),
+    0 8px 30px rgba(0, 0, 0, 0.12);
+}
+/* 系统设置里打开「降低透明度」：玻璃换成实心的深色 */
+@media (prefers-reduced-transparency: reduce) {
+  .dock,
+  .search-pill {
+    background: rgba(40, 40, 44, 0.92);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+/* 窗口太矮（比如 1280×720 的电脑浏览器），一屏放不下：先省掉那排 App 图标，小组件和程序坞不动 */
+@media (max-height: 729px) {
+  .apps { display: none; }
+}
 
 /* ================= 调参面板（由 engine/tuner.js 生成） ================= */
 /* 从底部滑上来的面板。顶部留出小组件的位置：开着面板也能拖卡片、马上看到效果 */
@@ -348,8 +479,8 @@ body::before {
   left: 0;
   right: 0;
   bottom: 0;
-  /* 面板顶边 = 最下面一排小组件的名字再往下 16px（80px 和 .home 的上边距对应） */
-  top: calc(env(safe-area-inset-top) + 80px + var(--screen-h) + 16px);
+  /* 面板顶边 = 最下面一排小组件的名字再往下 16px（--home-top 是 .home 的上边距）。面板会盖住 App 图标和程序坞 */
+  top: calc(var(--home-top) + var(--screen-h) + 16px);
   display: flex;
   flex-direction: column;
   max-width: 560px;
@@ -606,6 +737,15 @@ body::before {
   opacity: 0; /* 看不见但点得到：点色块就打开系统取色器 */
 }
 
+/* 壁纸：竖长的小手机屏幕形状，里面直接用壁纸本身的变量画（.wp-olive 等类，见文件开头「壁纸」） */
+.tn-swatch--wp::before {
+  width: 30px;
+  height: 52px;
+  border-radius: 8px;
+  background-color: var(--wallpaper);
+  background-image: var(--wallpaper-light);
+}
+
 /* ---- 底部按钮 ---- */
 .tn-foot {
   flex: none;
@@ -717,12 +857,6 @@ body::before {
   .is-tuning .home {
     padding-right: calc(var(--tn-side-w) + var(--tn-side-gap) * 2 + env(safe-area-inset-right));
   }
-  .is-tuning .hint { opacity: 1; } /* 侧边栏不挡说明文字，不用藏 */
-
-  /* 「调参」按钮变成开关：侧边栏开着时按钮是按下去的样子，再点一下收起 */
-  .is-tuning .tuner-open { background: rgba(255, 255, 255, 0.22); }
-  .is-tuning .tuner-open:active { background: rgba(255, 255, 255, 0.3); }
-
   .tn-sheet {
     top: calc(env(safe-area-inset-top) + var(--tn-side-gap));
     bottom: calc(env(safe-area-inset-bottom) + var(--tn-side-gap));

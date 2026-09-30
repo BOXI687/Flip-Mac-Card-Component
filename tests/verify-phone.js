@@ -30,13 +30,23 @@ async function setup(browser, initScript, extra = {}) {
     if (release) await t('touchEnd');
   };
   const tap = async (x, y) => { await t('touchStart', x, y); await sleep(30); await t('touchEnd'); };
-  return { ctx, page, errs, t, drag, tap };
+  // 长按：按住不动 ms 毫秒再松手（调参面板的隐藏入口是长按壁纸空白处 0.9 秒）
+  const longPress = async (p, ms = 1150) => { await t('touchStart', p.x, p.y); await sleep(ms); await t('touchEnd'); };
+  return { ctx, page, errs, t, drag, tap, longPress };
 }
+
+// 壁纸上的一块空白：App 图标那一排和「搜索」之间的正中间（这里什么都没有，和真 iPhone 一样）
+const wallSpot = (page) => page.evaluate(() => {
+  const a = document.querySelector('.apps').getBoundingClientRect();
+  const s = document.querySelector('.search-pill').getBoundingClientRect();
+  return { x: innerWidth / 2, y: (a.bottom + s.top) / 2 };
+});
+const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-sheet').classList.contains('is-open'));
 
 (async () => {
   const browser = await chromium.launch();
   // 首次提示默认是关的（Boxi 调好的默认值）：主流程第一次打开时把它打开，才能测它
-  const { ctx, page, errs, t, drag, tap } = await setup(browser, () => { if (!localStorage.getItem('peel-tuner-v1')) localStorage.setItem('peel-tuner-v1', JSON.stringify({ hintOnLoad: true })); });
+  const { ctx, page, errs, t, drag, tap, longPress } = await setup(browser, () => { if (!localStorage.getItem('peel-tuner-v1')) localStorage.setItem('peel-tuner-v1', JSON.stringify({ hintOnLoad: true })); });
   await page.goto(URL);
 
   // ---- 首次提示 ----
@@ -52,9 +62,68 @@ async function setup(browser, initScript, extra = {}) {
   const R = await page.evaluate(() => { const r = document.getElementById('stack').getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; });
   const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
 
-  // ---- 打开面板 ----
-  const btn = await page.evaluate(() => { const r = document.getElementById('tunerOpen').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
-  await tap(btn.x, btn.y);
+  // ---- 主屏幕：看起来像真的 iPhone，没有原型的痕迹 ----
+  const home = await page.evaluate(() => {
+    const r = (e) => e.getBoundingClientRect();
+    const apps = [...document.querySelectorAll('.apps .app')];
+    const dock = [...document.querySelectorAll('.dock .app')];
+    const pill = r(document.querySelector('.search-pill'));
+    const dk = r(document.querySelector('.dock'));
+    const small = r(document.getElementById('stackSmallA'));
+    const texts = [...document.querySelectorAll('.home p, .home button')].map((e) => e.textContent.trim());
+    return {
+      noProto: !document.querySelector('.hint, #tunerOpen, .tuner-open') && !texts.some((x) => /调参|拖动|滑动/.test(x)),
+      apps: apps.length, dock: dock.length,
+      appNames: apps.map((a) => a.querySelector('.app__name')?.textContent), dockNames: dock.filter((a) => a.querySelector('.app__name')).length,
+      iconW: r(apps[0].querySelector('.app__icon')).width,
+      // 程序坞里的图标和上面那排同一列
+      colsMatch: apps.every((a, i) => Math.abs(r(a).left - r(dock[i]).left) < 0.5),
+      appsTop: r(apps[0]).top, smallB: small.bottom,
+      pill: [pill.top, pill.bottom, pill.width], dockBox: [dk.top, dk.bottom, dk.left, dk.right],
+      fits: document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth,
+      stacks: peels.map((p) => [Math.round(p.W), Math.round(p.H)]).join(' '),
+      blur: getComputedStyle(document.querySelector('.dock')).backdropFilter,
+    };
+  });
+  check('home screen: no hint text, no 调参 button', home.noProto);
+  check('home screen: 4 app icons with names + 4 dock icons without names', home.apps === 4 && home.dock === 4 && home.appNames.every(Boolean) && home.dockNames === 0, home.appNames.join(','));
+  check('home screen: icon ≈ 62pt (64 × u), dock icons share the grid columns', Math.abs(home.iconW - 64 * 338 / 349.67) < 0.5 && home.colsMatch, `icon ${home.iconW.toFixed(1)}`);
+  check('home screen: order widgets → icons → 搜索 → dock, all on one 393×852 screen', home.appsTop > home.smallB + 30 && home.pill[0] > home.appsTop + 80 && home.pill[1] < home.dockBox[0] && home.dockBox[1] <= 852 - 15 && home.dockBox[1] >= 852 - 18 && home.fits, JSON.stringify(home));
+  check('home screen: widget stacks unchanged (338×158, 158×158 ×2)', home.stacks === '338,158 158,158 158,158', home.stacks);
+  check('home screen: dock is real glass (backdrop blur)', /blur/.test(home.blur), home.blur);
+  await page.screenshot({ path: OUT + '01b-home-screen.png' });
+
+  // ---- 隐藏入口：长按壁纸空白处 ----
+  const spot = await wallSpot(page);
+  await tap(spot.x, spot.y); await sleep(300);
+  check('long-press: a short tap on the wallpaper does not open the panel', !(await sheetOpen(page)));
+  await t('touchStart', spot.x, spot.y); await sleep(500);
+  check('long-press: not open yet after 0.5 s', !(await sheetOpen(page)));
+  await t('touchEnd'); await sleep(700);
+  check('long-press: releasing at 0.5 s cancels', !(await sheetOpen(page)));
+  // 按住以后手指挪开 > 10px：取消
+  await t('touchStart', spot.x, spot.y); await sleep(200);
+  for (let i = 1; i <= 4; i++) { await t('touchMove', spot.x + i * 4, spot.y); await sleep(16); }
+  await sleep(1000); await t('touchEnd'); await sleep(300);
+  check('long-press: moving the finger > 10px cancels', !(await sheetOpen(page)));
+  // 挪一点点（< 10px）：照样算长按
+  await t('touchStart', spot.x, spot.y); await sleep(200);
+  await t('touchMove', spot.x + 4, spot.y + 3); await sleep(1000);
+  const openedWhileHeld = await sheetOpen(page);
+  await t('touchEnd'); await sleep(300);
+  check('long-press: small wobble (< 10px) still opens, while the finger is still down', openedWhileHeld && (await sheetOpen(page)));
+  await page.evaluate(() => document.querySelector('.tn-close').click()); await sleep(600);
+  // 在小组件中间、App 图标、搜索、程序坞上长按：不打开，小组件也不换
+  const notWall = await page.evaluate(() => {
+    const c = (sel) => { const r = document.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+    return [c('#stack'), c('.apps .app__icon'), c('.search-pill'), c('.dock .app:nth-child(3)'), c('.widget__name')];
+  });
+  for (const p of notWall) { await longPress(p); await sleep(200); }
+  check('long-press on a widget / icon / 搜索 / dock / widget name does not open the panel (and no swipe)', !(await sheetOpen(page)) && (await page.evaluate(() => peels.every((p) => p.index === 0 && p.state === 'idle'))));
+  check('long-press: no text selection or callout (user-select / touch-callout none)', await page.evaluate(() => { const b = getComputedStyle(document.body); return (b.userSelect === 'none' || b.webkitUserSelect === 'none') && String(window.getSelection()) === ''; }));
+
+  // ---- 打开面板（长按壁纸） ----
+  await longPress(spot);
   await sleep(700);
   const sheet = await page.evaluate(() => { const s = document.querySelector('.tn-sheet'); const r = s.getBoundingClientRect(); return { open: s.classList.contains('is-open'), top: r.top, bottom: r.bottom, w: r.width }; });
   check('panel opens', sheet.open);
@@ -126,7 +195,7 @@ async function setup(browser, initScript, extra = {}) {
   check('tap on slider track jumps to position', Math.abs(dampAfterTap - 0.68) < 0.02, `damping ${dampAfterTap}`);
 
   // 颜色：默认的纸色（暖白纸）下面有小点，一开始就是选中的
-  const swDef = await page.evaluate(() => ({ def: [...document.querySelectorAll('.tn-swatch.is-default')].map((b) => b.getAttribute('aria-label')), sel: [...document.querySelectorAll('.tn-swatch.is-selected')].map((b) => b.getAttribute('aria-label')), color: PeelStack.DEFAULTS.paperColor }));
+  const swDef = await page.evaluate(() => ({ def: [...document.querySelectorAll('.tn-swatch.is-default:not(.tn-swatch--wp)')].map((b) => b.getAttribute('aria-label')), sel: [...document.querySelectorAll('.tn-swatch.is-selected:not(.tn-swatch--wp)')].map((b) => b.getAttribute('aria-label')), color: PeelStack.DEFAULTS.paperColor }));
   check('paper colour: 暖白纸 #f4ecd8 is the default swatch and selected', swDef.def.join() === '暖白纸' && swDef.sel.join() === '暖白纸' && swDef.color === '#f4ecd8', JSON.stringify(swDef));
   await page.evaluate(() => document.querySelector('.tn-swatch[aria-label="黑"]').scrollIntoView({ block: 'center' }));
   const sw = await page.evaluate(() => { const r = document.querySelector('.tn-swatch[aria-label="黑"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 15 }; });
@@ -134,6 +203,16 @@ async function setup(browser, initScript, extra = {}) {
   const paper = await page.evaluate(() => [peel.params.paperColor, getComputedStyle(document.querySelector('.peel-flap__paper')).backgroundColor]);
   check('paper colour swatch applies', paper[0] === '#1c1c1e' && paper[1].startsWith('rgba(28, 28, 30'), paper.join(' / '));
   await page.screenshot({ path: OUT + '03-panel-appearance.png' });
+
+  // 壁纸：默认橄榄（名字下有小点、选中）；点「夜幕」→ 页面、电池的假玻璃都换；存起来
+  const wp0 = await page.evaluate(() => ({ def: [...document.querySelectorAll('.tn-swatch--wp.is-default')].map((b) => b.getAttribute('aria-label')).join(), sel: [...document.querySelectorAll('.tn-swatch--wp.is-selected')].map((b) => b.getAttribute('aria-label')).join(), html: document.documentElement.dataset.wallpaper, glass: getComputedStyle(document.querySelector('#stack .card--battery')).backgroundImage }));
+  check('wallpaper: 橄榄 is the default and selected', wp0.def === '橄榄' && wp0.sel === '橄榄' && wp0.html === 'olive' && (await page.evaluate(() => PeelStack.DEFAULTS.wallpaper)) === 'olive', JSON.stringify(wp0).slice(0, 120));
+  await page.evaluate(() => document.querySelector('.tn-swatch--wp[aria-label="夜幕"]').scrollIntoView({ block: 'center' }));
+  const wsw = await page.evaluate(() => { const r = document.querySelector('.tn-swatch--wp[aria-label="夜幕"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 20 }; });
+  await tap(wsw.x, wsw.y); await sleep(100);
+  const wp1 = await page.evaluate(() => ({ p: peels.map((s) => s.params.wallpaper).join(), html: document.documentElement.dataset.wallpaper, bg: getComputedStyle(document.documentElement).backgroundColor, glass: getComputedStyle(document.querySelector('#stack .card--battery')).backgroundImage, saved: JSON.parse(localStorage.getItem(Tuner.STORE_KEY)).wallpaper }));
+  check('wallpaper: 夜幕 applies to the page, every stack, the battery glass, and is saved', wp1.p === 'dusk,dusk,dusk' && wp1.html === 'dusk' && wp1.bg === 'rgb(12, 20, 34)' && wp1.glass !== wp0.glass && wp1.saved === 'dusk', JSON.stringify(wp1).slice(0, 160));
+  await page.screenshot({ path: OUT + '03b-wallpaper-dusk.png' });
 
   // 开关
   // 开关按名字找（「掀开时」那一节也有一个开关，顺序不能当依据）
@@ -235,7 +314,7 @@ async function setup(browser, initScript, extra = {}) {
   const toast = await page.evaluate(() => { const e = document.querySelector('.tn-toast'); return [e.textContent, e.classList.contains('is-visible')]; });
   const clip = await page.evaluate(() => navigator.clipboard.readText());
   let parsed = null; try { parsed = JSON.parse(clip); } catch (e) {}
-  check('复制参数 copies JSON + shows toast', toast[0] === '已复制' && toast[1] && parsed && parsed.returnDamping === 0.82 && Object.keys(parsed).length === 20 && !('debug' in parsed) && !('peekStyle' in parsed) && !('peekPull' in parsed) && parsed.peekGather === true, clip);
+  check('复制参数 copies JSON (21 keys, incl. wallpaper) + shows toast', toast[0] === '已复制' && toast[1] && parsed && parsed.returnDamping === 0.82 && Object.keys(parsed).length === 21 && parsed.wallpaper === 'olive' && !('debug' in parsed) && !('peekStyle' in parsed) && !('peekPull' in parsed) && parsed.peekGather === true, clip);
   await page.screenshot({ path: OUT + '07-copied-toast.png' });
 
   // 剪贴板失败 → 手动复制框
@@ -255,12 +334,12 @@ async function setup(browser, initScript, extra = {}) {
   await tap(20, 40);
   await sleep(600);
   check('tap outside closes panel', !(await page.evaluate(() => document.querySelector('.tn-sheet').classList.contains('is-open'))));
-  // 完成按钮
-  await tap(btn.x, btn.y); await sleep(600);
+  // 完成按钮（先长按壁纸再打开）
+  await longPress(spot); await sleep(600);
   const done = await page.evaluate(() => { const r = document.querySelector('.tn-close').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
   await tap(done.x, done.y); await sleep(600);
   check('完成 button closes panel', !(await page.evaluate(() => document.querySelector('.tn-sheet').classList.contains('is-open'))));
-  const targets = await page.evaluate(() => { document.getElementById('tunerOpen').click(); return [...document.querySelectorAll('.tn-close, .tn-foot .tn-btn, .tn-slider, #tunerOpen')].map((e) => { const r = e.getBoundingClientRect(); return Math.min(r.width, r.height); }); });
+  const targets = await page.evaluate(() => { tuner.open(); return [...document.querySelectorAll('.tn-close, .tn-foot .tn-btn, .tn-slider')].map((e) => { const r = e.getBoundingClientRect(); return Math.min(r.width, r.height); }); });
   // 44 减一点点：元素落在小数像素的位置上时，量出来可能是 43.9999（浮点误差，不是真的变小了）
   check('tap targets >= 44px', Math.min(...targets) >= 44 - 1e-3, `min ${Math.min(...targets)}`);
   await page.evaluate(() => document.querySelector('.tn-close').click()); await sleep(400);
@@ -417,14 +496,14 @@ async function setup(browser, initScript, extra = {}) {
   check('no horizontal overflow (after swipes)', (await overflow()) === 0);
 
   // ---- 保存 & 重新打开 ----
-  await page.evaluate(() => { peel.setParams({ maxLift: 0.4, hintOnLoad: false }); localStorage.setItem(Tuner.STORE_KEY, JSON.stringify(peel.params)); });
+  await page.evaluate(() => { peel.setParams({ maxLift: 0.4, hintOnLoad: false, wallpaper: 'dawn' }); localStorage.setItem(Tuner.STORE_KEY, JSON.stringify(peel.params)); });
   await page.reload(); await sleep(1300);
-  const saved = await page.evaluate(() => [peel.params.maxLift, peel.params.hintOnLoad, peel.state]);
-  check('values persist after reload (and hint off respected)', saved[0] === 0.4 && saved[1] === false && saved[2] === 'idle', saved.join(','));
-  await page.evaluate(() => localStorage.setItem(Tuner.STORE_KEY, '{"maxLift":99,"cornerHit":"x","bogus":1,"paperColor":"red"}'));
+  const saved = await page.evaluate(() => [peel.params.maxLift, peel.params.hintOnLoad, peel.state, peels[2].params.wallpaper, document.documentElement.dataset.wallpaper]);
+  check('values persist after reload (and hint off respected, wallpaper 晨光 restored)', saved[0] === 0.4 && saved[1] === false && saved[2] === 'idle' && saved[3] === 'dawn' && saved[4] === 'dawn', saved.join(','));
+  await page.evaluate(() => localStorage.setItem(Tuner.STORE_KEY, '{"maxLift":99,"cornerHit":"x","bogus":1,"paperColor":"red","wallpaper":"neon"}'));
   await page.reload(); await sleep(300);
-  const sane = await page.evaluate(() => [peel.params.maxLift, peel.params.cornerHit, 'bogus' in peel.params, peel.params.paperColor]);
-  check('bad saved values are sanitised', sane[0] === 0.95 && sane[1] === 0.45 && !sane[2] && sane[3] === '#f4ecd8', sane.join(','));
+  const sane = await page.evaluate(() => [peel.params.maxLift, peel.params.cornerHit, 'bogus' in peel.params, peel.params.paperColor, peel.params.wallpaper, document.documentElement.dataset.wallpaper]);
+  check('bad saved values are sanitised (unknown wallpaper → 橄榄)', sane[0] === 0.95 && sane[1] === 0.45 && !sane[2] && sane[3] === '#f4ecd8' && sane[4] === 'olive' && sane[5] === 'olive', sane.join(','));
   await page.evaluate(() => localStorage.clear());
   check('no console/page errors (main run)', errs.length === 0, errs.join(' | '));
   await ctx.close();
@@ -438,8 +517,7 @@ async function setup(browser, initScript, extra = {}) {
   await s2.page.waitForFunction(() => window.peel && document.querySelector('.tn-sheet'), null, { timeout: 5000 }).catch(() => {});
   await sleep(1200);
   const ok2 = await s2.page.evaluate(() => { const idle = peel.state === 'idle' && peel.params.hintOnLoad === false; peel.peek('br'); return [idle && peel.state === 'returning' ? 'returning' : peel.state, !!document.querySelector('.tn-sheet')]; });
-  const b2 = await s2.page.evaluate(() => { const r = document.getElementById('tunerOpen').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
-  await s2.tap(b2.x, b2.y); await sleep(600);
+  await s2.longPress(await wallSpot(s2.page)); await sleep(600);
   const sl = await s2.page.evaluate(() => { const r = document.querySelector('.tn-slider__track').getBoundingClientRect(); return { x: r.left + r.width * 0.9, y: r.top + 2 }; });
   await s2.tap(sl.x, sl.y);
   const changed = await s2.page.evaluate(() => peel.params.returnDamping);

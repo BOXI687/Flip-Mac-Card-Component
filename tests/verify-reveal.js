@@ -359,7 +359,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
 
   // ================= 调参面板：聚拢开关、数字升起开关、旧存档的换算 =================
   {
-    await page.evaluate(() => { document.getElementById('tunerOpen').click(); });
+    await page.evaluate(() => { tuner.open(); });
     await sleep(600);
     const swInfo = (label) => page.evaluate((label) => {
       const s = document.querySelector(`.tn-switch[aria-label="${label}"]`);

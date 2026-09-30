@@ -57,6 +57,7 @@ const DEFAULTS = {
   underShade: 1, // 下层卡片上阴影的强度（1 = 100%）
   // ---- 其他 ----
   hintOnLoad: false, // 打开页面时自动掀一下右下角（App.jsx 读取）
+  wallpaper: 'olive', // 主屏幕壁纸：'olive' 橄榄 / 'dusk' 夜幕 / 'dawn' 晨光（tuner.js 把它写到 <html data-wallpaper>，样子在 style.css）
   // ---- 上下滑切换（swipe.js 读取；放在这里是为了和上面的参数一起存、一起复制） ----
   swipeResponse: 0.42, // 切换到下一张用多久（秒），越小越快
   swipeDamping: 0.86, // 切换停下时的阻尼：1 = 不晃，越小越「弹」

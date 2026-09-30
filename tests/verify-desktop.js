@@ -17,6 +17,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const rectOf = (page, sel) => page.evaluate((sel) => { const r = document.querySelector(sel).getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; }, sel);
 const overlap = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
 const isOpen = (page) => page.evaluate(() => document.querySelector('.tn-sheet').classList.contains('is-open'));
+// 调参面板的隐藏入口：在壁纸空白处按住鼠标 ≈1 秒（0.9 秒生效）。空白处 = 中号卡片左边、屏幕一半高的地方
+const wallSpot = (page) => page.evaluate(() => { const r = document.getElementById('stack').getBoundingClientRect(); return { x: Math.max(8, r.left / 2), y: innerHeight / 2 }; });
+async function longPress(page, p, ms = 1150) {
+  if (!p) p = await wallSpot(page);
+  await page.mouse.move(p.x, p.y); await page.mouse.down(); await sleep(ms); await page.mouse.up();
+}
 
 async function setup(browser, w, h, initScript) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h } });
@@ -68,19 +74,21 @@ async function desktop(browser, w, h) {
   check(`${tag}: sidebar full height, right side, 340-380 wide`, sb.t <= 13 && sb.b >= h - 13 && Math.abs(sb.r - (w - 12)) < 1 && sb.w >= 340 && sb.w <= 380, JSON.stringify(sb));
   const st = await rectOf(page, '#stack');
   const dots = await rectOf(page, '#dots');
-  const hint = await rectOf(page, '.hint');
-  const btn = await rectOf(page, '#tunerOpen');
+  const dock = await rectOf(page, '.dock');
+  const pill = await rectOf(page, '.search-pill');
+  const apps = await rectOf(page, '.apps');
   const smallA = await rectOf(page, '#stackSmallA');
   const smallB = await rectOf(page, '#stackSmallB');
   const allDots = await page.evaluate(() => [...document.querySelectorAll('.dots, .widget__name')].map((e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; }));
-  check(`${tag}: sidebar overlaps nothing (stack, small stacks, all dots + names, hint, 调参)`, ![st, smallA, smallB, dots, hint, btn, ...allDots].some((r) => overlap(r, sb)) && Math.max(...allDots.map((d) => d.r)) + 12 <= sb.l, `stack r ${st.r.toFixed(0)}, dots r ${dots.r.toFixed(0)}, sidebar l ${sb.l.toFixed(0)}`);
-  check(`${tag}: everything fits on screen (调参 button bottom inside viewport)`, btn.b <= h && smallA.b < hint.t, `btn bottom ${btn.b.toFixed(0)}`);
+  check(`${tag}: sidebar overlaps nothing (stack, small stacks, all dots + names, icons, 搜索, dock)`, ![st, smallA, smallB, dots, dock, pill, apps, ...allDots].some((r) => overlap(r, sb)) && Math.max(...allDots.map((d) => d.r)) + 12 <= sb.l, `stack r ${st.r.toFixed(0)}, dots r ${dots.r.toFixed(0)}, sidebar l ${sb.l.toFixed(0)}`);
+  // 窗口矮于 730 时那排 App 图标省掉（放不下），其余照常
+  check(`${tag}: everything fits on screen (dock at the bottom, icons only when tall enough)`, dock.b <= h - 15 && dock.b >= h - 18 && smallA.b < pill.t && (h >= 730 ? apps.h > 60 && apps.t > smallA.b && apps.b < pill.t : apps.h === 0) && Math.abs((dock.l + dock.r) / 2 - (st.l + st.r) / 2) < 1, `dock ${dock.t.toFixed(0)}–${dock.b.toFixed(0)}, apps h ${apps.h.toFixed(0)}`);
   const pad = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.home')).paddingRight));
   const mid = (16 + (w - pad)) / 2;
   check(`${tag}: stack centred in remaining space`, Math.abs((st.l + st.r) / 2 - mid) < 1, `stack centre ${((st.l + st.r) / 2).toFixed(1)} vs region centre ${mid.toFixed(1)}`);
-  check(`${tag}: hint text visible beside sidebar`, (await page.evaluate(() => getComputedStyle(document.querySelector('.hint')).opacity)) === '1');
+  check(`${tag}: no prototype UI (no hint text, no 调参 button)`, await page.evaluate(() => !document.querySelector('.hint, #tunerOpen, .tuner-open')));
   check(`${tag}: no horizontal overflow`, (await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)) === 0);
-  check(`${tag}: labels say 收起 / 左边`, await page.evaluate(() => document.querySelector('.tn-close').textContent === '收起' && document.querySelector('.tn-sub').textContent.includes('左边') && document.querySelector('.tn-sheet').getAttribute('role') === 'complementary' && document.getElementById('tunerOpen').getAttribute('aria-expanded') === 'true'));
+  check(`${tag}: labels say 收起 / 左边`, await page.evaluate(() => document.querySelector('.tn-close').textContent === '收起' && document.querySelector('.tn-sub').textContent.includes('左边') && document.querySelector('.tn-sub').textContent.includes('长按壁纸') && document.querySelector('.tn-sheet').getAttribute('role') === 'complementary'));
   await page.screenshot({ path: `${OUT}desktop-${tag}-open.png` });
 
   // 每个角（侧边栏开着）
@@ -124,19 +132,18 @@ async function desktop(browser, w, h) {
   await page.screenshot({ path: `${OUT}desktop-${tag}-closed.png` });
   for (const c of ['tl', 'tr', 'br', 'bl']) await peelCorner(page, c, `${tag} closed`);
 
-  // 调参按钮是开关
-  let b = await rectOf(page, '#tunerOpen');
-  await page.mouse.click(b.l + b.w / 2, b.t + b.h / 2);
+  // 长按壁纸是开关（电脑上）。按住不到 0.9 秒不算
+  await longPress(page, null, 400); await sleep(300);
+  check(`${tag}: short press on the wallpaper does nothing`, !(await isOpen(page)));
+  await longPress(page);
   await sleep(40);
-  // 刚点完、还在动画：马上按角
+  // 刚打开、还在动画：马上按角
   await peelCorner(page, 'tl', `${tag} right after reopening`);
-  check(`${tag}: 调参 button reopens`, await isOpen(page));
-  b = await rectOf(page, '#tunerOpen');
-  await page.mouse.click(b.l + b.w / 2, b.t + b.h / 2); await sleep(600);
-  check(`${tag}: 调参 button toggles closed`, !(await isOpen(page)));
-  b = await rectOf(page, '#tunerOpen');
-  await page.mouse.click(b.l + b.w / 2, b.t + b.h / 2); await sleep(600);
-  check(`${tag}: 调参 button toggles open again`, await isOpen(page));
+  check(`${tag}: long-press on the wallpaper reopens`, await isOpen(page));
+  await longPress(page); await sleep(600);
+  check(`${tag}: long-press toggles closed`, !(await isOpen(page)));
+  await longPress(page); await sleep(600);
+  check(`${tag}: long-press toggles open again`, await isOpen(page));
   for (const c of ['br', 'tr']) await peelCorner(page, c, `${tag} after toggling`);
 
   await page.evaluate(() => localStorage.clear());
@@ -207,7 +214,7 @@ async function desktop(browser, w, h) {
     const toast = await page.evaluate(() => { const e = document.querySelector('.tn-toast'); const r = e.getBoundingClientRect(); const s = document.querySelector('.tn-sheet').getBoundingClientRect(); return { text: e.textContent, vis: e.classList.contains('is-visible'), inside: r.left >= s.left && r.right <= s.right && r.bottom <= s.bottom }; });
     const clip = await page.evaluate(() => navigator.clipboard.readText());
     let parsed = null; try { parsed = JSON.parse(clip); } catch (e) {}
-    check('sidebar: 复制参数 copies JSON + toast inside sidebar', toast.text === '已复制' && toast.vis && toast.inside && parsed && Object.keys(parsed).length === 20, JSON.stringify(toast));
+    check('sidebar: 复制参数 copies JSON (21 keys, incl. wallpaper) + toast inside sidebar', toast.text === '已复制' && toast.vis && toast.inside && parsed && Object.keys(parsed).length === 21 && parsed.wallpaper === 'olive', JSON.stringify(toast));
     await page.screenshot({ path: `${OUT}desktop-1280x720-toast.png` });
     await page.evaluate(() => { navigator.clipboard.writeText = () => Promise.reject(new Error('no')); document.execCommand = () => false; });
     await page.click('.tn-foot .tn-btn--primary'); await sleep(250);
@@ -216,7 +223,7 @@ async function desktop(browser, w, h) {
     await page.screenshot({ path: `${OUT}desktop-1280x720-manual.png` });
     await page.click('.tn-manual .tn-btn');
     check('sidebar: manual box dismisses', (await page.evaluate(() => getComputedStyle(document.querySelector('.tn-manual')).display)) === 'none');
-    const targets = await page.evaluate(() => [...document.querySelectorAll('.tn-close, .tn-foot .tn-btn, .tn-slider, #tunerOpen')].map((e) => { const r = e.getBoundingClientRect(); return Math.min(r.width, r.height); }));
+    const targets = await page.evaluate(() => [...document.querySelectorAll('.tn-close, .tn-foot .tn-btn, .tn-slider')].map((e) => { const r = e.getBoundingClientRect(); return Math.min(r.width, r.height); }));
     check('sidebar: tap targets >= 44px', Math.min(...targets) >= 44, `min ${Math.min(...targets)}`);
     // 面板内滚动
     await page.mouse.move(1100, 400); await page.mouse.wheel(0, 600); await sleep(300);
@@ -234,7 +241,7 @@ async function desktop(browser, w, h) {
     await page.reload(); await sleep(600);
     check('persist: stays closed after reload', !(await isOpen(page)));
     const x0 = await page.evaluate(() => document.getElementById('stack').getBoundingClientRect().left);
-    await page.click('#tunerOpen'); await sleep(600);
+    await longPress(page); await sleep(600);
     await page.reload(); await sleep(20);
     const firstFrame = await page.evaluate(() => [document.querySelector('.tn-sheet').classList.contains('is-open'), getComputedStyle(document.querySelector('.home')).transitionDuration]);
     await sleep(600);
@@ -260,16 +267,16 @@ async function desktop(browser, w, h) {
     const { ctx, page, errs } = await setup(browser, 800, 700);
     await page.evaluate; await page.goto(URL); await page.evaluate(() => localStorage.setItem('peel-tuner-sidebar', '1')); await page.reload(); await sleep(2500);
     check('800: sheet NOT auto-opened even if desktop pref is open', !(await isOpen(page)));
-    await page.click('#tunerOpen'); await sleep(600);
+    await longPress(page); await sleep(600);
     const sh = await rectOf(page, '.tn-sheet'); const st = await rectOf(page, '#stack');
     check('800: bottom sheet opens below the card', (await isOpen(page)) && sh.t > st.b + 10 && sh.b === 700 && sh.w === 560, JSON.stringify(sh));
     check('800: labels unchanged (完成 / 上面)', await page.evaluate(() => document.querySelector('.tn-close').textContent === '完成' && document.querySelector('.tn-sub').textContent.includes('上面')));
-    check('800: hint hidden while sheet open (as before)', (await page.evaluate(() => getComputedStyle(document.querySelector('.hint')).opacity)) === '0');
     await page.screenshot({ path: `${OUT}desktop-800x700-sheet.png` });
     await peelCorner(page, 'tr', '800 sheet open');
     await page.mouse.click(30, 30); await sleep(600);
     check('800: clicking outside closes sheet', !(await isOpen(page)));
-    await page.click('#tunerOpen'); await sleep(600);
+    await longPress(page); await sleep(600);
+    check('800: long-press on the wallpaper opens the sheet again', await isOpen(page));
     await page.click('.tn-close'); await sleep(600);
     check('800: 完成 closes sheet', !(await isOpen(page)));
     check('800: pref not overwritten by sheet use', (await page.evaluate(() => localStorage.getItem('peel-tuner-sidebar'))) === '1');
@@ -286,13 +293,19 @@ async function desktop(browser, w, h) {
     await page.goto(URL); await page.evaluate(() => localStorage.setItem('peel-tuner-sidebar', '1')); await page.reload(); await sleep(2600);
     check('phone: sheet closed on load', !(await isOpen(page)));
     await page.screenshot({ path: `${OUT}phone-393x852-closed.png` });
-    await page.tap('#tunerOpen'); await sleep(700);
+    // 手指长按壁纸空白处（App 图标那排和「搜索」之间）
+    const cdp = await ctx.newCDPSession(page);
+    const spot = await page.evaluate(() => { const a = document.querySelector('.apps').getBoundingClientRect(); const s = document.querySelector('.search-pill').getBoundingClientRect(); return { x: innerWidth / 2, y: (a.bottom + s.top) / 2 }; });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: spot.x, y: spot.y, id: 1 }] });
+    await sleep(1150);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await sleep(700);
     await page.screenshot({ path: `${OUT}phone-393x852-open.png` });
     const sh = await rectOf(page, '.tn-sheet');
-    // 面板顶边以前是 274（中号卡片下面）；现在下面多了一排小号，停在最下面那排名字的下面：
-    // 80 + 158 + 37u + 158 + 6u + 14u + 16，u = 338 / 349.67
+    // 面板停在最下面那排小组件的名字下面（会盖住 App 图标和程序坞）：
+    // 68（顶边，没有安全区时）+ 158 + 37u + 158 + 6u + 14u + 16，u = 338 / 349.67
     const lowest = await page.evaluate(() => Math.max(...[...document.querySelectorAll('.stack, .widget__name')].map((e) => e.getBoundingClientRect().bottom)));
-    check('phone: sheet geometry (stops below the small row)', Math.round(sh.t) === 467 && sh.t >= lowest + 8 && sh.l === 0 && sh.w === 393 && sh.b === 852, JSON.stringify(sh) + ` lowest ${lowest.toFixed(1)}`);
+    check('phone: long-press opens the sheet; geometry (stops below the small row)', Math.round(sh.t) === 455 && sh.t >= lowest + 8 && sh.l === 0 && sh.w === 393 && sh.b === 852, JSON.stringify(sh) + ` lowest ${lowest.toFixed(1)}`);
     check('phone: no errors', errs.length === 0, errs.join(' | '));
     await ctx.close();
   }
@@ -310,7 +323,7 @@ async function desktop(browser, w, h) {
     await sleep(1500);
     await page.click('.tn-close'); await sleep(600);
     const closed = !(await isOpen(page));
-    await page.click('#tunerOpen'); await sleep(600);
+    await longPress(page); await sleep(600);
     await peelCorner(page, 'br', 'storage throws');
     check('storage throwing (desktop): page works, sidebar defaults open and toggles', s[0] === 'returning' && s[1] && closed && (await isOpen(page)) && errs.length === 0, `${s} ${closed} ${errs.join('|')}`);
     await ctx.close();

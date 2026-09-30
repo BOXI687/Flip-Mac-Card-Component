@@ -77,3 +77,24 @@ export const STACKS = {
   smallA: [W.battery, W.weather, clockSmall(CITIES[3])],
   smallB: [clockSmall(CITIES[0]), W.battery, W.weather],
 };
+
+/**
+ * 主屏幕上的 App 图标（只是样子，点了什么也不做）。
+ *   app  → 用哪个图标（画法在 components/AppIcon.jsx）
+ *   name → 图标下面的名字（程序坞里的图标和 iOS 一样不写名字，这里的 name 只给读屏软件念）
+ * 小组件下面一排 4 个，最下面的程序坞 4 个
+ */
+export const HOME_APPS = {
+  grid: [
+    { app: 'photos', name: '照片' },
+    { app: 'maps', name: '地图' },
+    { app: 'notes', name: '备忘录' },
+    { app: 'settings', name: '设置' },
+  ],
+  dock: [
+    { app: 'phone', name: '电话' },
+    { app: 'messages', name: '信息' },
+    { app: 'camera', name: '相机' },
+    { app: 'music', name: '音乐' },
+  ],
+};
