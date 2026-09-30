@@ -277,8 +277,7 @@
 .cal__col i:first-child { margin-top: calc(var(--u) * -0.5); }
 .cal__lunar { color: rgba(60, 60, 67, 0.6); }
 .cal__week { color: #ff3b30; font-weight: 600; margin-left: calc(var(--u) * 4.8); }
-.cal__empty,
-.cal__event {
+.cal__empty {
   position: absolute;
   left: calc(var(--u) * 19);
   top: calc(var(--u) * 94.7);
@@ -286,6 +285,40 @@
   font-size: calc(var(--u) * 15);
   line-height: calc(var(--u) * 18);
   color: rgba(60, 60, 67, 0.6);
+}
+/* 有日程时（INFERRED，凭 iOS 日历小组件的样子）：左边一根橙色竖条，右边日程名字（15 号半粗黑字）
+ * 和时间（13 号灰字），名字的顶和「今天无日程」对齐 */
+.cal__bar {
+  position: absolute;
+  left: calc(var(--u) * 19);
+  top: calc(var(--u) * 96.5);
+  width: calc(var(--u) * 3.5);
+  height: calc(var(--u) * 31);
+  border-radius: calc(var(--u) * 1.75);
+  background: #ff9f0a;
+}
+.cal__title,
+.cal__time {
+  position: absolute;
+  left: calc(var(--u) * 29);
+  right: calc(var(--u) * 12);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal__title {
+  top: calc(var(--u) * 94.7);
+  font-size: calc(var(--u) * 15);
+  line-height: calc(var(--u) * 18);
+  font-weight: 600;
+}
+.cal__time {
+  top: calc(var(--u) * 112.7);
+  font-size: calc(var(--u) * 13);
+  line-height: calc(var(--u) * 16);
+  color: rgba(60, 60, 67, 0.6);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ================= 播客·待播清单（中号） =================
@@ -392,6 +425,8 @@
   margin: 0;
   font-family: ui-rounded, "SF Pro Rounded", var(--font);
 }
+/* 步数、距离两组只有字那么宽（不然偷看时引擎量到的是整列的宽度，座位会留得太宽） */
+.fit__stats > div { width: max-content; }
 .fit__stats dt {
   font-family: var(--font);
   font-size: calc(var(--u) * 11.5);
@@ -429,6 +464,7 @@
   color: #000;
 }
 .notes__head {
+  position: relative; /* 下面那排小圆点（::after）跟着它放，偷看时它变淡，小圆点也一起变淡 */
   display: flex;
   align-items: center;
   gap: calc(var(--u) * 14.4);
@@ -460,14 +496,28 @@
   list-style: none;
 }
 .notes__list li {
+  position: relative;
   display: flex;
   align-items: center;
   height: calc(var(--u) * 37.1);
   font-size: calc(var(--u) * 13);
+}
+/* 太长就省略号：裁切放在标题自己身上（不放在 li 上），偷看时标题被请出这一行也不会被 li 裁掉 */
+.notes__list li span {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
-.notes__list li + li { border-top: 0.5px solid rgba(60, 60, 67, 0.18); }
+/* 两行之间的细线是一个单独的元素（不是 li 的边框）：偷看时标题被请走，细线留在原位变淡，不会跟着字跑 */
+.notes__rule {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 0.5px;
+  background: rgba(60, 60, 67, 0.18);
+}
 
 /* ================= 掀开就聚拢（engine/reveal.js） =================
  * 只在偷看时出现的元素（data-peek-only）：平时透明，放在它「出发」的地方。
@@ -513,6 +563,59 @@
   top: calc(50% - 0.55em);
   text-align: center;
 }
+/* 日历：大号的开始时间，从原来那行小时间（顶 112.7、行高 16）的中间出发 */
+.cal__peek-time {
+  left: calc(var(--u) * 29);
+  top: calc(var(--u) * 120.7 - 0.5em);
+  margin: 0;
+  font-size: calc(var(--u) * 22);
+  line-height: 1;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: #000;
+}
+/* 播客：标题的两行版（和原标题一样的字，只是窄一点、折成两行），和原标题左上角对齐；
+ * 「还剩24分钟」和那行灰字一样大，贴着那行灰字的底 */
+.pod__text { position: relative; }
+.pod__peek-title {
+  left: 0;
+  top: 0;
+  width: calc(var(--u) * 150);
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: calc(var(--u) * 13);
+  line-height: calc(var(--u) * 16.8);
+  font-weight: 600;
+}
+.pod__peek-left {
+  left: 0;
+  bottom: 0;
+  font-size: calc(var(--u) * 11);
+  line-height: calc(var(--u) * 13);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.78);
+}
+/* 备忘录：黄色小标签（文件夹 + 备忘录），从黄色的头那里出发。
+ * 引擎量大小时只量里面的图标和字（量不到背景），所以上下的内边距很小，只比座位之间的空隙小一点 */
+.notes__chip {
+  left: calc(var(--u) * 16);
+  top: calc(var(--u) * 12);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 5);
+  padding: calc(var(--u) * 2.5) calc(var(--u) * 7) calc(var(--u) * 2.5) calc(var(--u) * 6);
+  border-radius: calc(var(--u) * 7);
+  background: linear-gradient(180deg, #ffd301, #fbbc01);
+  color: #fff;
+  font-size: calc(var(--u) * 13);
+  line-height: calc(var(--u) * 16);
+  font-weight: 700;
+}
+.notes__chip .notes__folder { width: calc(var(--u) * 15); height: calc(var(--u) * 11); }
 
 /* 数字逐位升起：盖在原来的字上面的一层。每个字有自己的小窗口（位置、大小由 reveal.js 量好写上），
  * 窗口只裁掉下沿以下的部分（左右、上面放宽一点，字形伸出一点点也不会被切掉），
