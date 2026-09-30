@@ -258,9 +258,8 @@ export default function Weather({ size = 'medium', data }) {
  * 掀开就聚拢（见 engine/reveal.js、CLAUDE.md）：掀起上面那张卡时，天气卡上的信息怎么挤进口子里。
  *   上面 JSX 里带 data-peek="…" 的元素就是这里说的名字。
  *   roll     哪个元素的数字会「逐位升起」（名字是以前「数字滚动」时起的，沿用）
- *   layouts  A 换座位：口子从小到大依次用的座位表 —— 先只有温度 → 温度 + 图标 + 天气 → 再加最高/最低
- *   magnet   B 磁铁：chain = 被吸过去后排成一串的顺序；weight = 重要程度（1 最重要，越重要越早被吸过来）；
- *            不在 chain 里的元素（城市、逐小时预报）被推开一点、变淡
+ *   layouts  座位表：口子从小到大依次用 —— 先只有温度 → 温度 + 图标 + 天气 → 再加最高/最低。
+ *            不在座位表里的元素（城市、逐小时预报）留在原位、变淡
  */
 const PEEK = {
   roll: 'temp',
@@ -270,9 +269,5 @@ const PEEK = {
     { either: [{ row: ['temp', 'icon', 'cond'] }, { col: ['temp', { row: ['icon', 'cond'] }] }] },
     { either: [{ col: [{ row: ['temp', 'icon', 'cond'] }, 'hl'] }, { col: ['temp', { row: ['icon', 'cond'] }, 'hl'] }] },
   ],
-  magnet: {
-    chain: [{ row: ['icon', 'cond'] }, { key: 'temp', scale: 1.35 }, { key: 'hl', scale: 0.9 }],
-    weight: { temp: 1, icon: 0.72, cond: 0.72, hl: 0.4, city: 0.1, hours: 0 },
-  },
 };
 Weather.peek = { medium: PEEK, small: PEEK };

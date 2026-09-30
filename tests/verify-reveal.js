@@ -4,7 +4,7 @@
  *   (cd dist && python3 -m http.server 8780) &
  *   PORT=8780 node tests/verify-reveal.js
  *
- * 天气（中号）、电池（小号）、世界时钟（中号）× A 换座位 / B 磁铁 × 四个角：
+ * 天气（中号）、电池（小号）、世界时钟（中号）× 四个角：
  *   - 慢慢掀的时候，主角每一帧的位置是连续的（没有突然跳一下）
  *   - 停住以后，主角的中心在露出来的口子里、是正的（没有歪、没有镜像）、看得见
  *   - 掀到最大：数字逐位升起全部到位，显示的是真实数值
@@ -12,8 +12,8 @@
  * 数字逐位升起（修「15:96」那种错数字）：天气 °、电池 %、世界时钟 : 各两个角，慢慢掀、中途停三次、慢慢盖回，
  *   每一帧都检查：数字层里每一位都是真实数值里那个位置上的字，没有多余的字；原来的字是透明的（不会叠两层）；
  *   停住时数字也停住；掀到最大时每一位都升到位，和原来的字重合（差不到 1px）。
- * 另外：风格「关」时什么都不动；系统「减弱动态效果」时什么都不动；换了一张卡再掀，量的是新的那张；
- * 天气（小号）、电池（中号）、世界时钟（小号）各跑一次 A / B；没有 console 报错。
+ * 另外：面板里关掉「掀开时信息聚拢」时什么都不动；系统「减弱动态效果」时什么都不动；换了一张卡再掀，量的是新的那张；
+ * 天气（小号）、电池（中号）、世界时钟（小号）各跑一次；面板的开关、旧存档（A / B / 关）的换算；没有 console 报错。
  */
 const { execSync } = require('child_process');
 const { chromium } = require(`${execSync('npm root -g').toString().trim()}/playwright`);
@@ -63,15 +63,15 @@ async function setup(browser, extra = {}) {
 
 const corners = (B) => ({ tl: { x: B.l + 6, y: B.t + 6 }, tr: { x: B.r - 6, y: B.t + 6 }, br: { x: B.r - 6, y: B.b - 6 }, bl: { x: B.l + 6, y: B.b - 6 } });
 
-/** 放好这一叠：最上面是第 index 张，所有叠都用 style */
-async function prepare(page, cs, style) {
-  await page.evaluate(({ cs, style }) => {
+/** 放好这一叠：最上面是第 index 张；gather = 所有叠的「掀开时信息聚拢」开不开 */
+async function prepare(page, cs, gather = true) {
+  await page.evaluate(({ cs, gather }) => {
     const p = peels[cs.stack];
     p.swiper.pos = p.swiper.target = cs.index;
     p.setIndex(cs.index);
-    peels.forEach((q) => q.setParams({ peekStyle: style, peekRoll: true }));
+    peels.forEach((q) => q.setParams({ peekGather: gather, peekRoll: true }));
     window.__traceStack = p;
-  }, { cs, style });
+  }, { cs, gather });
   return page.evaluate((id) => { const r = document.getElementById(id).getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; }, cs.id);
 }
 
@@ -117,12 +117,11 @@ const leftovers = (page, i) => page.evaluate((i) => {
   const browser = await chromium.launch();
   const { ctx, page, errs, t } = await setup(browser);
 
-  // ================= 三种小组件 × A / B × 四个角 =================
-  const full = [['weather-medium', 'a'], ['weather-medium', 'b'], ['battery-small', 'a'], ['battery-small', 'b'], ['clock-medium', 'a'], ['clock-medium', 'b']];
-  for (const [name, style] of full) {
+  // ================= 三种小组件 × 四个角 =================
+  for (const name of ['weather-medium', 'battery-small', 'clock-medium']) {
     const cs = CASES[name];
     for (const c of ['tl', 'tr', 'br', 'bl']) {
-      const B = await prepare(page, cs, style);
+      const B = await prepare(page, cs);
       const from = corners(B)[c];
       const mid = { x: B.l + B.w / 2, y: B.t + B.h / 2 };
       // 往卡片中心再过去一点（中号卡很宽，只拖到中心的话口子还不大）
@@ -137,9 +136,9 @@ const leftovers = (page, i) => page.evaluate((i) => {
       const v = trace.slice(1).map((r, k) => Math.hypot(r[0] - trace[k][0], r[1] - trace[k][1]));
       const jump = Math.max(0, ...v.slice(1).map((x, k) => Math.abs(x - v[k])));
       const sJump = Math.max(0, ...trace.slice(1).map((r, k) => Math.abs(r[2] - trace[k][2])));
-      check(`${name} ${style.toUpperCase()} ${c}: hero moves continuously while peeling`, trace.length > 30 && jump < 6 && sJump < 0.08,
+      check(`${name} ${c}: hero moves continuously while peeling`, trace.length > 30 && jump < 6 && sJump < 0.08,
         `${trace.length} frames, max step ${Math.max(0, ...v).toFixed(1)}px, max step change ${jump.toFixed(1)}px, max scale step ${sJump.toFixed(3)}`);
-      check(`${name} ${style.toUpperCase()} ${c}: paused mid-peel → hero inside the opening, upright, visible`, h.active && h.inside && h.upright && h.opacity > 0.9 && h.scale > 0.35,
+      check(`${name} ${c}: paused mid-peel → hero inside the opening, upright, visible`, h.active && h.inside && h.upright && h.opacity > 0.9 && h.scale > 0.35,
         JSON.stringify({ key: h.key, o: h.o, c: h.c, rot: h.rot, scale: h.scale, opacity: h.opacity }));
       // 再往外拖到最大：数字逐位升起全部到位
       const far = { x: mid.x + (mid.x - from.x) * 1.4, y: mid.y + (mid.y - from.y) * 1.4 };
@@ -148,36 +147,34 @@ const leftovers = (page, i) => page.evaluate((i) => {
       const hf = await heroState(page, cs.stack);
       if (c === 'br' || c === 'tl') {
         const rs = hf.rise;
-        check(`${name} ${style.toUpperCase()} ${c}: fully peeled → every digit risen, showing the real value`, hf.active && !!rs && /\d/.test(rs.text) && rs.glyphs.map((g) => g.ch).join('') === rs.text && rs.glyphs.every((g) => g.p === 1) && hf.inside,
+        check(`${name} ${c}: fully peeled → every digit risen, showing the real value`, hf.active && !!rs && /\d/.test(rs.text) && rs.glyphs.map((g) => g.ch).join('') === rs.text && rs.glyphs.every((g) => g.p === 1) && hf.inside,
           `${rs && rs.glyphs.map((g) => `${g.ch}:${g.p}`).join(' ')} / ${rs && rs.text}, o ${hf.o}, inside ${hf.inside}`);
       }
       await t('touchEnd');
       await page.waitForFunction((i) => peels[i].state === 'idle', cs.stack, { timeout: 5000 }).catch(() => {});
       await sleep(60);
       const lo = await leftovers(page, cs.stack);
-      check(`${name} ${style.toUpperCase()} ${c}: after release every change on the card is cleared`, lo.state === 'idle' && !lo.active && lo.bad.length === 0 && lo.overlays === 0, JSON.stringify(lo));
+      check(`${name} ${c}: after release every change on the card is cleared`, lo.state === 'idle' && !lo.active && lo.bad.length === 0 && lo.overlays === 0, JSON.stringify(lo));
     }
   }
 
-  // ================= 另外三种尺寸：每种一个角、A / B =================
+  // ================= 另外三种尺寸：每种一个角 =================
   for (const [name, c] of [['weather-small', 'bl'], ['battery-medium', 'tr'], ['clock-small', 'br']]) {
-    for (const style of ['a', 'b']) {
-      const cs = CASES[name];
-      const B = await prepare(page, cs, style);
-      const from = corners(B)[c];
-      const mid = { x: B.l + B.w / 2, y: B.t + B.h / 2 };
-      const to = { x: mid.x + (mid.x - from.x) * 0.25, y: mid.y + (mid.y - from.y) * 0.25 };
-      await t('touchStart', from.x, from.y);
-      for (let k = 1; k <= 30; k++) { await t('touchMove', from.x + (to.x - from.x) * k / 30, from.y + (to.y - from.y) * k / 30); await sleep(16); }
-      await sleep(600);
-      const h = await heroState(page, cs.stack);
-      await t('touchEnd');
-      await page.waitForFunction((i) => peels[i].state === 'idle', cs.stack, { timeout: 5000 }).catch(() => {});
-      await sleep(60);
-      const lo = await leftovers(page, cs.stack);
-      check(`${name} ${style.toUpperCase()} ${c}: hero in the opening, upright; cleared after release`, h.active && h.inside && h.upright && h.opacity > 0.9 && lo.bad.length === 0 && lo.overlays === 0 && !lo.active,
-        JSON.stringify({ key: h.key, o: h.o, c: h.c, rot: h.rot, lo }));
-    }
+    const cs = CASES[name];
+    const B = await prepare(page, cs);
+    const from = corners(B)[c];
+    const mid = { x: B.l + B.w / 2, y: B.t + B.h / 2 };
+    const to = { x: mid.x + (mid.x - from.x) * 0.25, y: mid.y + (mid.y - from.y) * 0.25 };
+    await t('touchStart', from.x, from.y);
+    for (let k = 1; k <= 30; k++) { await t('touchMove', from.x + (to.x - from.x) * k / 30, from.y + (to.y - from.y) * k / 30); await sleep(16); }
+    await sleep(600);
+    const h = await heroState(page, cs.stack);
+    await t('touchEnd');
+    await page.waitForFunction((i) => peels[i].state === 'idle', cs.stack, { timeout: 5000 }).catch(() => {});
+    await sleep(60);
+    const lo = await leftovers(page, cs.stack);
+    check(`${name} ${c}: hero in the opening, upright; cleared after release`, h.active && h.inside && h.upright && h.opacity > 0.9 && lo.bad.length === 0 && lo.overlays === 0 && !lo.active,
+      JSON.stringify({ key: h.key, o: h.o, c: h.c, rot: h.rot, lo }));
   }
 
   // ================= 数字逐位升起：每一帧看到的都是正确的字 =================
@@ -186,7 +183,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
   for (const [name, shape] of RISE_CASES) {
     for (const c of ['br', 'tl']) {
       const cs = CASES[name];
-      const B = await prepare(page, cs, 'a');
+      const B = await prepare(page, cs);
       // 页面里的检查器：每一帧（requestAnimationFrame）都看一遍数字层
       await page.evaluate((i) => {
         const p = peels[i];
@@ -315,24 +312,23 @@ const leftovers = (page, i) => page.evaluate((i) => {
     }
   }
 
-  // ================= 「关」：什么都不动 =================
+  // ================= 关掉「掀开时信息聚拢」：什么都不动 =================
   {
     const cs = CASES['weather-medium'];
-    const B = await prepare(page, cs, 'off');
+    const B = await prepare(page, cs, false);
     const from = corners(B).br;
     await t('touchStart', from.x, from.y);
     for (let k = 1; k <= 20; k++) { await t('touchMove', from.x - B.w * 0.5 * k / 20, from.y - B.h * 0.5 * k / 20); await sleep(16); }
     await sleep(300);
     const off = await page.evaluate((i) => { const p = peels[i]; return { state: p.state, active: p.reveal.active, styled: [...p.under.querySelectorAll('[data-peek]')].filter((e) => e.getAttribute('style')).length }; }, cs.stack);
     await t('touchEnd'); await sleep(1300);
-    check('style 关: nothing on the under card moves', off.state === 'dragging' && !off.active && off.styled === 0, JSON.stringify(off));
+    check('掀开时信息聚拢 off: nothing on the under card moves', off.state === 'dragging' && !off.active && off.styled === 0, JSON.stringify(off));
   }
 
   // ================= 滑到别的卡以后再掀：量的是新的「下一张」 =================
   {
-    await page.evaluate(() => peels.forEach((q) => q.setParams({ peekStyle: 'a' })));
     const cs = CASES['weather-medium'];
-    await prepare(page, cs, 'a'); // 中号最上面是世界时钟，下面是天气
+    await prepare(page, cs); // 中号最上面是世界时钟，下面是天气
     const B = await page.evaluate(() => { const r = document.getElementById('stack').getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; });
     // 手指往上滑一张：最上面换成天气，下面绕回电池（换了一张下层卡 → 要重新量电池）
     const m = { x: B.l + B.w / 2, y: B.t + B.h / 2 };
@@ -361,27 +357,42 @@ const leftovers = (page, i) => page.evaluate((i) => {
       JSON.stringify({ a, b, lo }));
   }
 
-  // ================= 调参面板：风格切换、默认标记、数字升起开关 =================
+  // ================= 调参面板：聚拢开关、数字升起开关、旧存档的换算 =================
   {
     await page.evaluate(() => { document.getElementById('tunerOpen').click(); });
     await sleep(600);
-    const seg = await page.evaluate(() => {
-      const btns = [...document.querySelectorAll('.tn-seg__btn')];
-      return { names: btns.map((b) => b.textContent), def: btns.filter((b) => b.classList.contains('is-default')).map((b) => b.textContent), sel: btns.filter((b) => b.classList.contains('is-selected')).map((b) => b.textContent), minH: Math.min(...btns.map((b) => b.getBoundingClientRect().height)) };
-    });
-    check('panel: 信息怎么动 shows A / B / 关 with A marked default', seg.names.join() === 'A 换座位,B 磁铁,关' && seg.def.join() === 'A 换座位' && seg.sel.join() === 'A 换座位' && seg.minH >= 44, JSON.stringify(seg));
-    await page.evaluate(() => { const b = [...document.querySelectorAll('.tn-seg__btn')].find((x) => x.textContent === 'B 磁铁'); b.scrollIntoView({ block: 'center' }); });
+    const swInfo = (label) => page.evaluate((label) => {
+      const s = document.querySelector(`.tn-switch[aria-label="${label}"]`);
+      if (!s) return null;
+      s.scrollIntoView({ block: 'center' });
+      const r = s.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2, on: s.getAttribute('aria-checked') };
+    }, label);
+    const g0 = await swInfo('掀开时信息聚拢');
+    const leftovers0 = await page.evaluate(() => ({ seg: document.querySelectorAll('.tn-seg, .tn-seg__btn').length, pull: Tuner.SECTIONS.flatMap((x) => x.items).some((c) => c.key === 'peekPull' || c.key === 'peekStyle') }));
+    check('panel: 掀开时信息聚拢 is a switch, on by default; no A / B / 关 control or 吸力 slider left', !!g0 && g0.on === 'true' && leftovers0.seg === 0 && !leftovers0.pull, JSON.stringify({ g0, leftovers0 }));
     await sleep(100);
-    const bb = await page.evaluate(() => { const r = [...document.querySelectorAll('.tn-seg__btn')].find((x) => x.textContent === 'B 磁铁').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
-    await t('touchStart', bb.x, bb.y); await sleep(30); await t('touchEnd'); await sleep(100);
-    const after = await page.evaluate(() => ({ all: peels.every((p) => p.params.peekStyle === 'b'), saved: JSON.parse(localStorage.getItem(Tuner.STORE_KEY)).peekStyle, readout: [...document.querySelectorAll('.tn-row')].find((r) => r.querySelector('.tn-label').textContent === '信息怎么动').querySelector('.tn-value').textContent }));
-    check('panel: tapping B 磁铁 switches every stack and is saved', after.all && after.saved === 'b' && after.readout === 'B 磁铁', JSON.stringify(after));
+    await t('touchStart', g0.x, g0.y); await sleep(30); await t('touchEnd'); await sleep(100);
+    const off = await page.evaluate(() => ({ all: peels.every((p) => p.params.peekGather === false), saved: JSON.parse(localStorage.getItem(Tuner.STORE_KEY)).peekGather, aria: document.querySelector('.tn-switch[aria-label="掀开时信息聚拢"]').getAttribute('aria-checked') }));
+    check('panel: tapping 掀开时信息聚拢 turns it off for every stack and is saved', off.all && off.saved === false && off.aria === 'false', JSON.stringify(off));
+    await page.evaluate(() => document.querySelector('.tn-switch[aria-label="掀开时信息聚拢"]').click());
+    check('panel: tapping again turns it back on', await page.evaluate(() => peels.every((p) => p.params.peekGather === true)));
     await page.evaluate(() => document.querySelector('.tn-switch[aria-label="数字逐位升起"]').click());
     check('panel: 数字逐位升起 switch toggles peekRoll', await page.evaluate(() => peels.every((p) => p.params.peekRoll === false)));
-    await page.evaluate(() => { localStorage.setItem(Tuner.STORE_KEY, JSON.stringify({ peekStyle: 'zzz', peekScale: 9, hintOnLoad: false })); });
+    await page.evaluate(() => { localStorage.setItem(Tuner.STORE_KEY, JSON.stringify({ peekGather: 'zzz', peekScale: 9, hintOnLoad: false })); });
     await page.reload(); await sleep(700);
-    const sane = await page.evaluate(() => [peel.params.peekStyle, peel.params.peekScale]);
-    check('panel: bad saved peek values are sanitised', sane[0] === 'a' && sane[1] === 2.2, sane.join());
+    const sane = await page.evaluate(() => [peel.params.peekGather, peel.params.peekScale]);
+    check('panel: bad saved peek values are sanitised', sane[0] === true && sane[1] === 2.2, sane.join());
+    // 旧版存下来的「信息怎么动」：B 磁铁 → 聚拢开（B 已删掉），关 → 聚拢关；旧的「吸力」丢掉
+    const legacy = [];
+    for (const [old, want] of [['b', true], ['a', true], ['off', false], ['关', false]]) {
+      await page.evaluate((old) => localStorage.setItem(Tuner.STORE_KEY, JSON.stringify({ peekStyle: old, peekPull: 1.6, hintOnLoad: false })), old);
+      await page.reload(); await sleep(700);
+      const got = await page.evaluate(() => ({ g: peels.map((p) => p.params.peekGather), stray: peels.some((p) => 'peekStyle' in p.params || 'peekPull' in p.params) }));
+      legacy.push({ old, want, ...got, ok: got.g.every((v) => v === want) && !got.stray });
+    }
+    check('panel: old saved peekStyle loads as 聚拢 on (a, b) / off (off, 关), stray peekPull dropped', legacy.every((x) => x.ok), JSON.stringify(legacy));
+    await page.evaluate(() => localStorage.setItem(Tuner.STORE_KEY, JSON.stringify({ hintOnLoad: false })));
   }
   check('no console/page errors', errs.length === 0, errs.join(' | '));
   await ctx.close();
@@ -390,7 +401,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
   {
     const s = await setup(browser, { reducedMotion: 'reduce' });
     const cs = CASES['weather-medium'];
-    const B = await prepare(s.page, cs, 'a');
+    const B = await prepare(s.page, cs);
     const from = corners(B).br;
     await s.t('touchStart', from.x, from.y);
     for (let k = 1; k <= 20; k++) { await s.t('touchMove', from.x - B.w * 0.5 * k / 20, from.y - B.h * 0.5 * k / 20); await sleep(16); }

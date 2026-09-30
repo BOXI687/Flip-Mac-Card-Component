@@ -75,8 +75,8 @@ const SECTIONS = [
         key: 'paperColor', label: '纸背颜色', type: 'color',
         hint: '掀起来那一角，纸的背面是什么颜色',
         swatches: [
+          { name: '暖白纸', color: '#f4ecd8' },
           { name: '白', color: '#f7f7fa' },
-          { name: '暖白', color: '#f4ecd8' },
           { name: '浅灰', color: '#d8d8dd' },
           { name: '黑', color: '#1c1c1e' },
         ],
@@ -140,13 +140,8 @@ const SECTIONS = [
     title: '掀开时，下面那张卡的信息',
     items: [
       {
-        key: 'peekStyle', label: '信息怎么动', type: 'choice',
-        hint: 'A：按座位表一个接一个坐进口子里，口子越大放得越多；B：像被磁铁吸过去，越重要吸得越近，会轻轻晃',
-        options: [
-          { value: 'a', name: 'A 换座位' },
-          { value: 'b', name: 'B 磁铁' },
-          { value: 'off', name: '关' },
-        ],
+        key: 'peekGather', label: '掀开时信息聚拢', type: 'switch',
+        hint: '下面那张卡上最重要的信息一个接一个坐进掀开的口子里，口子越大放得越多；关掉就不动',
       },
       {
         key: 'peekRoll', label: '数字逐位升起', type: 'switch',
@@ -160,7 +155,7 @@ const SECTIONS = [
       },
       {
         key: 'peekDamping', label: '跟随弹性',
-        hint: '信息停到位时会不会轻轻晃一下（B 本来就比 A 更晃）',
+        hint: '信息停到位时会不会轻轻晃一下',
         min: 0.5, max: 1, step: 0.01, invert: true, ends: ['干脆', 'Q 弹'],
         show: (v) => {
           const s = Math.round(((1 - v) / 0.5) * 100);
@@ -179,12 +174,6 @@ const SECTIONS = [
         hint: '最重要的那个数字在口子里最多放大到几倍（口子太小时会自动缩小，保证放得下）',
         min: 1, max: 2.2, step: 0.05, ends: ['原大', '很大'],
         show: (v) => `${v.toFixed(2)} 倍`,
-      },
-      {
-        key: 'peekPull', label: '吸力（B）',
-        hint: '只对 B：吸力越大，掀开一点点信息就被吸过来',
-        min: 0.5, max: 2, step: 0.05, ends: ['弱', '强'],
-        show: (v) => pct(v),
       },
     ],
   },
@@ -221,6 +210,12 @@ function loadSaved(defaults) {
     return {};
   }
   if (!obj || typeof obj !== 'object') return {};
+  // 旧版存的是「信息怎么动」A / B / 关（peekStyle）：B 磁铁已经删掉了，A、B 都当作「聚拢：开」，关 = 关。
+  // 旧的「吸力」（peekPull）下面不认识，自然就丢掉了
+  if (!('peekGather' in obj) && typeof obj.peekStyle === 'string') {
+    if (obj.peekStyle === 'a' || obj.peekStyle === 'b') obj.peekGather = true;
+    else if (obj.peekStyle === 'off' || obj.peekStyle === '关') obj.peekGather = false;
+  }
   // 只收下认识的键、类型对得上的值，数字还要限制在滑块范围内 —— 防止旧版本 / 手滑存进奇怪的数
   const out = {};
   for (const ctl of allControls()) {
@@ -232,8 +227,6 @@ function loadSaved(defaults) {
       out[ctl.key] = Math.min(ctl.max, Math.max(ctl.min, v));
     } else if (ctl.type === 'color') {
       if (/^#[0-9a-f]{6}$/i.test(v)) out[ctl.key] = v;
-    } else if (ctl.type === 'choice') {
-      if (ctl.options.some((o) => o.value === v)) out[ctl.key] = v;
     } else {
       out[ctl.key] = v;
     }
@@ -425,35 +418,6 @@ function buildSwitch(ctl, api) {
   };
 }
 
-/**
- * 几选一（iOS 的分段控件 segmented control）：一排按钮，选中的那个是白底。
- * 默认的那个选项下面有一个小点，调乱了也知道哪个是默认
- */
-function buildChoice(ctl, api) {
-  const seg = h('div', 'tn-seg');
-  seg.setAttribute('role', 'radiogroup');
-  seg.setAttribute('aria-label', ctl.label);
-  const btns = ctl.options.map((o) => {
-    const b = h('button', 'tn-seg__btn', o.name);
-    b.type = 'button';
-    b.setAttribute('role', 'radio');
-    b.dataset.value = o.value;
-    if (o.value === api.defaultOf(ctl.key)) b.classList.add('is-default');
-    b.addEventListener('click', () => api.set(ctl, o.value));
-    seg.append(b);
-    return b;
-  });
-  ctl.show = (v) => (ctl.options.find((o) => o.value === v) || {}).name || '';
-  return {
-    nodes: [seg],
-    render: (v) => btns.forEach((b) => {
-      const on = b.dataset.value === v;
-      b.classList.toggle('is-selected', on);
-      b.setAttribute('aria-checked', on ? 'true' : 'false');
-    }),
-  };
-}
-
 /** 颜色：几个预设色块 + 一个「自定义」取色器 */
 function buildColor(ctl, api) {
   const row = h('div', 'tn-swatches');
@@ -462,6 +426,7 @@ function buildColor(ctl, api) {
     b.type = 'button';
     b.style.setProperty('--c', s.color);
     b.setAttribute('aria-label', s.name);
+    if (same(s.color.toLowerCase(), String(api.defaultOf(ctl.key)).toLowerCase())) b.classList.add('is-default');
     b.append(h('span', 'tn-swatch__name', s.name));
     b.addEventListener('click', () => api.set(ctl, s.color));
     row.append(b);
@@ -579,9 +544,7 @@ function attach(peel, others = [], dom = {}) {
           ? buildSwitch(ctl, api)
           : ctl.type === 'color'
             ? buildColor(ctl, api)
-            : ctl.type === 'choice'
-              ? buildChoice(ctl, api)
-              : buildSlider(ctl, api);
+            : buildSlider(ctl, api);
       let value = null;
       if (built.head) rowHead.append(built.head);
       else {

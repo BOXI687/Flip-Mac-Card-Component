@@ -35,7 +35,8 @@ async function setup(browser, initScript, extra = {}) {
 
 (async () => {
   const browser = await chromium.launch();
-  const { ctx, page, errs, t, drag, tap } = await setup(browser);
+  // 首次提示默认是关的（Boxi 调好的默认值）：主流程第一次打开时把它打开，才能测它
+  const { ctx, page, errs, t, drag, tap } = await setup(browser, () => { if (!localStorage.getItem('peel-tuner-v1')) localStorage.setItem('peel-tuner-v1', JSON.stringify({ hintOnLoad: true })); });
   await page.goto(URL);
 
   // ---- 首次提示 ----
@@ -92,7 +93,6 @@ async function setup(browser, initScript, extra = {}) {
     peekDamping: () => peel.params.peekDamping,
     peekStagger: () => peel.params.peekStagger,
     peekScale: () => peel.params.peekScale,
-    peekPull: () => peel.params.peekPull,
   };
   for (const key of keys) {
     const info = await page.evaluate((key) => {
@@ -125,7 +125,9 @@ async function setup(browser, initScript, extra = {}) {
   const dampAfterTap = await page.evaluate(() => peel.params.returnDamping);
   check('tap on slider track jumps to position', Math.abs(dampAfterTap - 0.68) < 0.02, `damping ${dampAfterTap}`);
 
-  // 颜色
+  // 颜色：默认的纸色（暖白纸）下面有小点，一开始就是选中的
+  const swDef = await page.evaluate(() => ({ def: [...document.querySelectorAll('.tn-swatch.is-default')].map((b) => b.getAttribute('aria-label')), sel: [...document.querySelectorAll('.tn-swatch.is-selected')].map((b) => b.getAttribute('aria-label')), color: PeelStack.DEFAULTS.paperColor }));
+  check('paper colour: 暖白纸 #f4ecd8 is the default swatch and selected', swDef.def.join() === '暖白纸' && swDef.sel.join() === '暖白纸' && swDef.color === '#f4ecd8', JSON.stringify(swDef));
   await page.evaluate(() => document.querySelector('.tn-swatch[aria-label="黑"]').scrollIntoView({ block: 'center' }));
   const sw = await page.evaluate(() => { const r = document.querySelector('.tn-swatch[aria-label="黑"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 15 }; });
   await tap(sw.x, sw.y);
@@ -233,7 +235,7 @@ async function setup(browser, initScript, extra = {}) {
   const toast = await page.evaluate(() => { const e = document.querySelector('.tn-toast'); return [e.textContent, e.classList.contains('is-visible')]; });
   const clip = await page.evaluate(() => navigator.clipboard.readText());
   let parsed = null; try { parsed = JSON.parse(clip); } catch (e) {}
-  check('复制参数 copies JSON + shows toast', toast[0] === '已复制' && toast[1] && parsed && parsed.returnDamping === 0.82 && Object.keys(parsed).length === 21 && !('debug' in parsed), clip);
+  check('复制参数 copies JSON + shows toast', toast[0] === '已复制' && toast[1] && parsed && parsed.returnDamping === 0.82 && Object.keys(parsed).length === 20 && !('debug' in parsed) && !('peekStyle' in parsed) && !('peekPull' in parsed) && parsed.peekGather === true, clip);
   await page.screenshot({ path: OUT + '07-copied-toast.png' });
 
   // 剪贴板失败 → 手动复制框
@@ -259,7 +261,8 @@ async function setup(browser, initScript, extra = {}) {
   await tap(done.x, done.y); await sleep(600);
   check('完成 button closes panel', !(await page.evaluate(() => document.querySelector('.tn-sheet').classList.contains('is-open'))));
   const targets = await page.evaluate(() => { document.getElementById('tunerOpen').click(); return [...document.querySelectorAll('.tn-close, .tn-foot .tn-btn, .tn-slider, #tunerOpen')].map((e) => { const r = e.getBoundingClientRect(); return Math.min(r.width, r.height); }); });
-  check('tap targets >= 44px', Math.min(...targets) >= 44, `min ${Math.min(...targets)}`);
+  // 44 减一点点：元素落在小数像素的位置上时，量出来可能是 43.9999（浮点误差，不是真的变小了）
+  check('tap targets >= 44px', Math.min(...targets) >= 44 - 1e-3, `min ${Math.min(...targets)}`);
   await page.evaluate(() => document.querySelector('.tn-close').click()); await sleep(400);
 
   // ---- 调试层 + 截图 ----
@@ -421,7 +424,7 @@ async function setup(browser, initScript, extra = {}) {
   await page.evaluate(() => localStorage.setItem(Tuner.STORE_KEY, '{"maxLift":99,"cornerHit":"x","bogus":1,"paperColor":"red"}'));
   await page.reload(); await sleep(300);
   const sane = await page.evaluate(() => [peel.params.maxLift, peel.params.cornerHit, 'bogus' in peel.params, peel.params.paperColor]);
-  check('bad saved values are sanitised', sane[0] === 0.95 && sane[1] === 0.45 && !sane[2] && sane[3] === '#f7f7fa', sane.join(','));
+  check('bad saved values are sanitised', sane[0] === 0.95 && sane[1] === 0.45 && !sane[2] && sane[3] === '#f4ecd8', sane.join(','));
   await page.evaluate(() => localStorage.clear());
   check('no console/page errors (main run)', errs.length === 0, errs.join(' | '));
   await ctx.close();
@@ -431,8 +434,10 @@ async function setup(browser, initScript, extra = {}) {
     Object.defineProperty(window, 'localStorage', { get() { throw new Error('SecurityError: storage disabled'); } });
   });
   await s2.page.goto(URL);
-  await s2.page.waitForFunction(() => window.peel && peel.state === 'returning', null, { timeout: 5000 }).catch(() => {});
-  const ok2 = await s2.page.evaluate(() => [peel.state, !!document.querySelector('.tn-sheet')]);
+  // 存不了、读不了：用默认值（首次提示是关的）。页面装好后手动掀一下，确认翻角照常工作
+  await s2.page.waitForFunction(() => window.peel && document.querySelector('.tn-sheet'), null, { timeout: 5000 }).catch(() => {});
+  await sleep(1200);
+  const ok2 = await s2.page.evaluate(() => { const idle = peel.state === 'idle' && peel.params.hintOnLoad === false; peel.peek('br'); return [idle && peel.state === 'returning' ? 'returning' : peel.state, !!document.querySelector('.tn-sheet')]; });
   const b2 = await s2.page.evaluate(() => { const r = document.getElementById('tunerOpen').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
   await s2.tap(b2.x, b2.y); await sleep(600);
   const sl = await s2.page.evaluate(() => { const r = document.querySelector('.tn-slider__track').getBoundingClientRect(); return { x: r.left + r.width * 0.9, y: r.top + 2 }; });

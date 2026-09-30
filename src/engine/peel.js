@@ -49,25 +49,24 @@ const DEFAULTS = {
   cornerHit: 0.45, // 角落热区半径 = 卡片高度 × 这个比例
   pressLift: 1, // 手指刚按住角落时，纸角先自己翘起一点（倍数，0 = 不翘），告诉人「抓住了」
   // ---- 外观 ----
-  paperColor: '#f7f7fa', // 纸背颜色
-  paperOpacity: 0.84, // 纸背不透明度：越小，透过纸背看到的反字越清楚
-  flapBlur: 1.2, // 透过纸背看到的字有多模糊（px）
-  highlight: 1, // 卷曲高光强度（1 = 100%）
+  paperColor: '#f4ecd8', // 纸背颜色（暖白纸）
+  paperOpacity: 0.6, // 纸背不透明度：越小，透过纸背看到的反字越清楚
+  flapBlur: 2, // 透过纸背看到的字有多模糊（px）
+  highlight: 0.75, // 卷曲高光强度（1 = 100%）
   flapShadow: 0.38, // 掀起的纸角投到下面的影子有多深（0~1）
   underShade: 1, // 下层卡片上阴影的强度（1 = 100%）
   // ---- 其他 ----
-  hintOnLoad: true, // 打开页面时自动掀一下右下角（App.jsx 读取）
+  hintOnLoad: false, // 打开页面时自动掀一下右下角（App.jsx 读取）
   // ---- 上下滑切换（swipe.js 读取；放在这里是为了和上面的参数一起存、一起复制） ----
   swipeResponse: 0.42, // 切换到下一张用多久（秒），越小越快
   swipeDamping: 0.86, // 切换停下时的阻尼：1 = 不晃，越小越「弹」
   // ---- 掀开时，下面那张卡的信息怎么动（reveal.js 读取） ----
-  peekStyle: 'a', // 'a' = 换座位，'b' = 磁铁吸过去，'off' = 不动
+  peekGather: true, // 掀开时信息聚拢：true = 按座位表挤进口子里，false = 下面那张卡不动
   peekRoll: true, // 数字逐位升起：数字露出来时一位一位从下面升到原位（名字沿用以前的「滚动」，存过的设置照样能用）
   peekResponse: 0.34, // 信息跟上去用多久（秒），越小越紧跟
-  peekDamping: 0.88, // 信息停下时的阻尼：1 = 不晃，越小越「弹」（B 在这个基础上再软 0.3）
+  peekDamping: 0.72, // 信息停下时的阻尼：1 = 不晃，越小越「弹」
   peekStagger: 40, // 出发间隔（毫秒）：后一个元素比前一个晚出发多久
   peekScale: 1.5, // 放大倍数：主角在口子里最多放大到原来的几倍
-  peekPull: 1, // 吸力（只对 B）：越大，同样掀开一点，信息被吸过来得越早
 };
 
 export class PeelStack {
@@ -86,7 +85,7 @@ export class PeelStack {
     this.isBusy = options.isBusy || (() => false);
     this.peekSpecs = options.peekSpecs || [];
     this.reveal = new Reveal(this); // 掀开时让下面那张卡的信息聚拢到口子里
-    this.geom = null; // 最近一帧的折痕和露出来的形状（reveal 每帧要用）
+    this.geom = null; // 最近一帧的折痕和掀开了多少（reveal 每帧要用）
     // 可调参数：先拷一份默认值，再用 options.params 覆盖（不直接改 DEFAULTS，这样随时能「恢复默认」）
     this.params = Object.assign({}, DEFAULTS, options.params);
     this.cards = Array.from(el.querySelectorAll(':scope > .card'));
@@ -573,8 +572,9 @@ export class PeelStack {
     // 用卡片的真实轮廓（连续圆角）来切，而不是矩形：这样平躺的部分、翻页、影子的圆角都和卡片一致
     const kept = G.clipHalfPlane(this.shape, (X) => f.dist(X)); // 还平躺的部分
     const lifted = G.clipHalfPlane(this.shape, (X) => -f.dist(X)); // 被掀起的部分
-    // 被掀起的部分 = 下面那张卡露出来的部分（翻过去的纸落在平躺那一侧，不挡它）
-    this.geom = { f, lifted, frac: G.area(lifted) / this.shapeArea };
+    // 被掀起的部分 = 下面那张卡露出来的部分（翻过去的纸落在平躺那一侧，不挡它）。
+    // reveal 每帧要用：折痕 f，和掀开了整张卡的多少 frac
+    this.geom = { f, frac: G.area(lifted) / this.shapeArea };
 
     // 1) 顶层卡片：只显示平躺的部分
     this.applyClip(this.peelCard, kept);

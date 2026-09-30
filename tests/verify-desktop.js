@@ -183,8 +183,9 @@ async function desktop(browser, w, h) {
     await page.click('.tn-swatch[aria-label="黑"]');
     check('sidebar: paper colour swatch applies', await page.evaluate(() => peel.params.paperColor === '#1c1c1e'));
     const sws = [await page.$('.tn-switch[aria-label="打开时自动提示"]'), await page.$('.tn-switch[aria-label="几何辅助线"]')];
+    const hint0 = await page.evaluate(() => peel.params.hintOnLoad);
     await sws[0].scrollIntoViewIfNeeded(); await sws[0].click();
-    check('sidebar: hint-on-load switch toggles', (await page.evaluate(() => peel.params.hintOnLoad)) === false);
+    check('sidebar: hint-on-load switch toggles', hint0 === false && (await page.evaluate(() => peel.params.hintOnLoad)) === true);
     await sws[1].click();
     check('sidebar: geometry overlay switch toggles', await page.evaluate(() => peel.debug && document.getElementById('stack').classList.contains('show-debug')));
     // 辅助线开着时掀角截图
@@ -206,7 +207,7 @@ async function desktop(browser, w, h) {
     const toast = await page.evaluate(() => { const e = document.querySelector('.tn-toast'); const r = e.getBoundingClientRect(); const s = document.querySelector('.tn-sheet').getBoundingClientRect(); return { text: e.textContent, vis: e.classList.contains('is-visible'), inside: r.left >= s.left && r.right <= s.right && r.bottom <= s.bottom }; });
     const clip = await page.evaluate(() => navigator.clipboard.readText());
     let parsed = null; try { parsed = JSON.parse(clip); } catch (e) {}
-    check('sidebar: 复制参数 copies JSON + toast inside sidebar', toast.text === '已复制' && toast.vis && toast.inside && parsed && Object.keys(parsed).length === 21, JSON.stringify(toast));
+    check('sidebar: 复制参数 copies JSON + toast inside sidebar', toast.text === '已复制' && toast.vis && toast.inside && parsed && Object.keys(parsed).length === 20, JSON.stringify(toast));
     await page.screenshot({ path: `${OUT}desktop-1280x720-toast.png` });
     await page.evaluate(() => { navigator.clipboard.writeText = () => Promise.reject(new Error('no')); document.execCommand = () => false; });
     await page.click('.tn-foot .tn-btn--primary'); await sleep(250);
@@ -302,9 +303,10 @@ async function desktop(browser, w, h) {
       Object.defineProperty(window, 'localStorage', { get() { throw new Error('SecurityError: storage disabled'); } });
     });
     await page.goto(URL);
-    // 等首次提示真的开始掀（以前固定等 1200ms，机器一忙就会错过或还没开始）
-    const hinted = await page.waitForFunction(() => window.peel && peel.state === 'returning', null, { timeout: 5000 }).then(() => 'returning', () => 'never');
-    const s = await page.evaluate((h) => [h, document.querySelector('.tn-sheet').classList.contains('is-open')], hinted);
+    // 存储读不了：用默认值（首次提示默认关）。等页面装好，再手动掀一下，确认翻角照常工作
+    await page.waitForFunction(() => window.peel && document.querySelector('.tn-sheet'), null, { timeout: 5000 }).catch(() => {});
+    await sleep(1200);
+    const s = await page.evaluate(() => { const idle = peel.state === 'idle' && peel.params.hintOnLoad === false; peel.peek('br'); return [idle && peel.state === 'returning' ? 'returning' : peel.state, document.querySelector('.tn-sheet').classList.contains('is-open')]; });
     await sleep(1500);
     await page.click('.tn-close'); await sleep(600);
     const closed = !(await isOpen(page));

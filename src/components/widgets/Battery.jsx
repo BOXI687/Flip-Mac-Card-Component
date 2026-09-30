@@ -116,8 +116,7 @@ export default function Battery({ size = 'medium', devices }) {
 
 /*
  * 掀开就聚拢（见 engine/reveal.js、CLAUDE.md）：电量最低的设备挤进口子里。
- *   A 换座位：口子小 → 图标 + 百分比；口子大 → 圆环（图标在圆环里）+ 百分比
- *   B 磁铁：百分比最重要，图标、圆环跟着过来；其它设备让开变淡
+ *   口子小 → 图标 + 百分比；口子大 → 圆环（图标在圆环里）+ 百分比；其它设备留在原位、变淡
  */
 const PEEK = {
   hero: 'pct', // 主角（不写的话 = 第一张座位表里的第一个元素）
@@ -126,9 +125,5 @@ const PEEK = {
     { either: [{ row: ['icon', 'pct'] }, { col: ['icon', 'pct'] }] },
     { either: [{ row: [{ over: ['ring', 'icon'] }, 'pct'] }, { col: [{ over: ['ring', 'icon'] }, 'pct'] }] },
   ],
-  magnet: {
-    chain: [{ key: 'pct', scale: 1.4 }, { over: [{ key: 'ring', scale: 0.7 }, { key: 'icon', scale: 0.7 }] }],
-    weight: { pct: 1, icon: 0.8, ring: 0.8, rest: 0 },
-  },
 };
 Battery.peek = { medium: PEEK, small: PEEK };

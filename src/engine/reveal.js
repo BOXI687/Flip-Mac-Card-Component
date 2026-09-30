@@ -7,12 +7,9 @@
  * 所以手指每动一点，信息就跟着动一点；手指停住，它们也停住；松手盖回去，动画倒着放；
  * 中途再抓住，接着动 —— 全都不需要额外处理。
  *
- * 两种风格（调参面板里切换）：
- *   A 换座位：每个小组件事先写好 2~3 种「座位表」（口子小 → 只放主角；口子大 → 主角 + 配角）。
- *             口子越大，越往后面的座位表过渡；元素一个接一个（出发间隔）走到新座位上。
- *   B 磁铁吸过去：没有座位表。每个元素有一个「重要程度」，口子越大、越重要，就被吸得越近；
- *             吸过来的元素沿折痕方向排成一串，中心对准口子的重心；不重要的让开、变淡。
- *             弹簧更软，会轻轻晃，移动时还会顺着方向微微歪一下（停下来就正了）。
+ * 怎么挤（「换座位」）：每个小组件事先写好 2~3 种「座位表」（口子小 → 只放主角；口子大 → 主角 + 配角）。
+ * 口子越大，越往后面的座位表过渡；元素一个接一个（出发间隔）走到新座位上；不在座位表里的元素留在原位、变淡。
+ * 调参面板里的「掀开时信息聚拢」可以整个关掉（关掉 = 下面那张卡不动）。
  * 另外「数字逐位升起」：主角的数字一位一位从下面升起来（每一位从头到尾都是正确的那个字），
  * 盖回去时一位一位沉回去。以前是里程表滚动，但拖得慢时轮子会停在中间的数字上（比如「15:96」），
  * 显示了错的信息 —— 规矩是：位置、大小、透明度可以跟手，数字本身永远是对的。
@@ -29,8 +26,6 @@
  *   2. 在组件上挂一份说明：Weather.peek = { medium: {...}, small: {...} }，格式见 CLAUDE.md。
  *   PeelStack.jsx 会把这份说明交给引擎；没有说明的小组件，掀开时下面的卡保持不动。
  */
-import * as G from './geometry.js';
-
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const lerp = (a, b, t) => a + (b - a) * t;
 /** 平滑的 0 → 1 过渡：x 在 a 以下是 0，b 以上是 1，中间是一段 S 形曲线（起步、到头都不突兀） */
@@ -46,11 +41,9 @@ const ENGAGE = [0.015, 0.2]; // 掀开面积（占上限的比例）从 1.5% 到
 const RISE = [0.06, 0.36]; // 数字逐位升起：掀开 6% 开始升，36% 时每一位都到位（主角大约 15%~20% 才在口子里看得清，升起的过程要留给看得见的这一段）
 const RISE_STAGGER = 0.3; // 后一位比前一位晚多少才开始升（按一位自己升起的那一段算：0.3 = 前一位升到 30% 时后一位出发）
 const RISE_FADE = 0.45; // 每一位在升起的前 45% 里从透明变到不透明（主要靠「从下面露出来」，淡入只是让边缘柔一点）
-const TILT = 0.008; // B：每秒移动 1px 歪多少度（400px/s ≈ 3°）
-const TILT_MAX = 3.5; // B：最多歪几度
 const HISTORY_EXTRA = 40; // 出发间隔的历史记录多留几毫秒
 
-/** 系统设置里打开了「减弱动态效果」：信息不动（和「关」一样） */
+/** 系统设置里打开了「减弱动态效果」：信息不动（和面板里关掉「掀开时信息聚拢」一样） */
 function prefersReducedMotion() {
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
@@ -67,18 +60,17 @@ export class Reveal {
 
   /**
    * 开始掀：量出下面那张卡上每个 data-peek 元素的「原位」（相对卡片左上角）。
-   * spec：这张小组件的说明（见文件开头）；没有说明、风格是「关」、或者系统要求减弱动态效果时，什么也不做。
+   * spec：这张小组件的说明（见文件开头）；没有说明、面板里关掉了聚拢、或者系统要求减弱动态效果时，什么也不做。
    */
   begin(card, spec) {
     this.end();
     const p = this.peel.params;
-    if (!card || !spec || p.peekStyle === 'off' || !['a', 'b'].includes(p.peekStyle) || prefersReducedMotion()) return;
+    if (!card || !spec || !p.peekGather || prefersReducedMotion()) return;
     const els = Array.from(card.querySelectorAll('[data-peek]'));
     if (!els.length) return;
 
     this.card = card;
     this.spec = spec;
-    this.style = p.peekStyle;
     const cr = card.getBoundingClientRect();
     this.W = cr.width;
     this.H = cr.height;
@@ -104,7 +96,6 @@ export class Reveal {
         // 弹簧的当前状态：x, y = 相对原位挪了多少 px；s = 缩放；a = 不透明度
         x: 0, y: 0, s: 1, a: only ? 0 : 1,
         vx: 0, vy: 0, vs: 0, va: 0,
-        weight: 0, // B：重要程度（下面从说明里读）
         written: '',
       };
     });
@@ -114,7 +105,7 @@ export class Reveal {
       if (!(it.key in this.byKey)) this.byKey[it.key] = it;
     });
 
-    // ---- A：座位表（从小到大），和每个元素第一次上场的顺序 ----
+    // ---- 座位表（从小到大），和每个元素第一次上场的顺序 ----
     // 每一级可以写成 { either: [横排, 竖排] }：两种排法都算，哪种在当前的口子里放得更大就用哪种
     this.layouts = (spec.layouts || [])
       .map((node) => (node && node.either ? node.either : [node]).map((n) => build(n, this.byKey)).filter(Boolean))
@@ -126,29 +117,9 @@ export class Reveal {
     const main = keysOf((spec.layouts || [])[(spec.layouts || []).length - 1]);
     this.mainItems = main.map((k) => this.byKey[k]).filter((it) => it && it.homeA === 1);
 
-    // ---- B：磁铁 ----
-    const mag = spec.magnet || {};
-    const weight = mag.weight || {};
-    this.items.forEach((it) => (it.weight = weight[it.key] ?? (it.key === this.heroKey ? 1 : 0)));
-    this.chain = (mag.chain || order).map((node) => {
-      const b = build(node, this.byKey);
-      if (!b) return null;
-      b.weight = Math.max(...b.keys.map((k) => weight[k] ?? 0));
-      return b;
-    }).filter(Boolean);
-    // 一串信息沿折痕排，朝哪头读：以「沿对角线掀」时的折痕为准，尽量从上往下（接近水平时从左往右）。
-    // 这一次掀角里方向固定下来，折痕转动时不会突然倒过来
-    const C = this.peel.C || { x: this.W, y: this.H };
-    const toCenter = G.normalize(G.sub({ x: this.W / 2, y: this.H / 2 }, C));
-    let tRef = { x: -toCenter.y, y: toCenter.x };
-    if (Math.abs(tRef.y) > 0.3 ? tRef.y < 0 : tRef.x < 0) tRef = G.scale(tRef, -1);
-    this.tRef = tRef;
-
-    // ---- 出发间隔：A 按上场顺序，B 按重要程度；不上场的元素（只负责变淡）不等 ----
+    // ---- 出发间隔：按上场顺序；不上场的元素（只负责变淡）不等 ----
     // 主角永远第一个出发
-    const rank = [this.heroKey].concat(this.style === 'a'
-      ? order
-      : [...this.chain].sort((a, b) => b.weight - a.weight).flatMap((c) => c.keys)).filter((k, i, a) => a.indexOf(k) === i);
+    const rank = [this.heroKey].concat(order).filter((k, i, a) => a.indexOf(k) === i);
     this.items.forEach((it) => {
       const k = rank.indexOf(it.key);
       it.rank = k < 0 ? 0 : k;
@@ -183,13 +154,13 @@ export class Reveal {
 
   /**
    * 每一帧（peel.js 的 loop 里调用，手指不动时也调用：弹簧还要继续追目标）。
-   * geom：这一帧的折痕 f 和露出来的形状 lifted（下面那张卡看得见的部分）
+   * geom：这一帧的折痕 f 和掀开了整张卡的多少 frac（见 peel.js 的 render）
    */
   step(now, geom) {
     if (!this.items) return;
     const p = this.peel.params;
-    // 拖的时候在面板里换了风格 / 开关了数字升起：重新开始（下一帧起用新的）
-    if (p.peekStyle !== this.style || !!p.peekRoll !== this.rollOn) {
+    // 拖的时候在面板里关掉了聚拢 / 开关了数字升起：重新开始（下一帧起用新的；关掉了就全部回原位）
+    if (!p.peekGather || !!p.peekRoll !== this.rollOn) {
       const { card, spec } = this;
       this.end();
       this.begin(card, spec);
@@ -199,22 +170,18 @@ export class Reveal {
     this.lastT = now;
 
     // 1) 这一帧每个元素「应该」在哪（目标），记进历史，出发间隔要用
-    const T = this.style === 'b' ? this.targetsB(geom) : this.targetsA(geom);
+    const T = this.targets(geom);
     const stagger = Math.max(0, p.peekStagger || 0);
     const maxDelay = stagger * (this.items.length + 1);
     this.hist.push({ t: now, T });
     while (this.hist.length > 2 && this.hist[1].t < now - maxDelay - HISTORY_EXTRA) this.hist.shift();
 
     // 2) 每个元素用自己的弹簧追「若干毫秒以前」的目标 —— 这就是一个接一个出发
-    const b = this.style === 'b';
-    const damping = b ? Math.max(0.3, p.peekDamping - 0.3) : p.peekDamping; // B 更软，会轻轻晃
+    const w = (2 * Math.PI) / p.peekResponse;
+    const k = w * w;
+    const c = 2 * p.peekDamping * w;
     for (const it of this.items) {
       const tgt = this.sample(now - it.rank * stagger, it.i);
-      // B：越重要的元素被吸得越快
-      const response = b ? p.peekResponse * (1.3 - 0.4 * it.weight) : p.peekResponse;
-      const w = (2 * Math.PI) / response;
-      const k = w * w;
-      const c = 2 * damping * w;
       const h = dt / 4;
       for (let s = 0; s < 4; s++) {
         it.vx += (k * (tgt[0] - it.x) - c * it.vx) * h;
@@ -226,8 +193,6 @@ export class Reveal {
         it.s += it.vs * h;
         it.a += it.va * h;
       }
-      // B：顺着移动方向微微歪一下（像被吸着拖过去），停下来就正了
-      it.rot = b ? clamp(it.vx * TILT, -TILT_MAX, TILT_MAX) : 0;
       this.write(it);
     }
 
@@ -271,7 +236,7 @@ export class Reveal {
   write(it) {
     const s = Math.max(0.01, it.s);
     const a = clamp(it.a, 0, 1);
-    const tf = `translate(${it.x.toFixed(2)}px, ${it.y.toFixed(2)}px) scale(${s.toFixed(4)})${it.rot ? ` rotate(${it.rot.toFixed(2)}deg)` : ''}`;
+    const tf = `translate(${it.x.toFixed(2)}px, ${it.y.toFixed(2)}px) scale(${s.toFixed(4)})`;
     const key = `${tf}|${a.toFixed(3)}`;
     if (key === it.written) return; // 和上一帧一样就不写（手指停住、弹簧也停了）
     it.written = key;
@@ -301,7 +266,7 @@ export class Reveal {
     return [x - it.home.x, y - it.home.y, s, a];
   }
 
-  // ---------------- A 换座位 ----------------
+  // ---------------- 换座位 ----------------
   /**
    * 口子贴着被掀的那个角。一个「座位表」整体是一个框（宽 w0 × 高 h0），
    * 从角上（往里缩 pad）开始摆，框的四个角都要在折痕这一侧（再留 margin）。
@@ -329,7 +294,7 @@ export class Reveal {
     };
   }
 
-  targetsA(geom) {
+  targets(geom) {
     const o = this.openness(geom);
     this.o = o;
     const e = smooth(ENGAGE[0], ENGAGE[1], o);
@@ -440,118 +405,16 @@ export class Reveal {
     return { items, roll: riseProgress(o) };
   }
 
-  // ---------------- B 磁铁吸过去 ----------------
-  targetsB(geom) {
-    const o = this.openness(geom);
-    this.o = o;
-    if (o <= 0 || !this.chain.length) return this.homeTargets(o);
-    const p = this.peel.params;
-    const maxS = p.peekScale;
-    const f = geom.f;
-    const lifted = geom.lifted;
-    const Gc = polyCentroid(lifted); // 口子的重心：磁铁在这里
-    const gap = this.H * GAP;
-
-    // 折痕方向 t（沿着折痕走），和 begin 里定好的读的方向同向
-    let t = { x: -f.n.y, y: f.n.x };
-    if (G.dot(t, this.tRef) < 0) t = G.scale(t, -1);
-
-    // 每个元素被吸多近（0 = 在原位，1 = 吸到了）：越重要越早开始、吸力越大越早
-    const pull = p.peekPull;
-    const pulls = this.chain.map((c) => smooth((1 - c.weight) * 0.45, (1 - c.weight) * 0.45 + 0.28, o * pull));
-
-    // 一串：前后两个框沿 t 方向刚好不重叠的距离 × 后一个的「位子让出来多少」。
-    // 位子比元素先让出来（被吸过来 40% 时位子已经全让开了），元素到的时候不会和别人叠在一起
-    const slot = pulls.map((q) => smooth(0, 0.4, q));
-    const sizes = this.chain.map((c) => c.size(gap));
-    const u = [0];
-    for (let k = 1; k < sizes.length; k++) {
-      const A = sizes[k - 1];
-      const B = sizes[k];
-      const along = Math.min(
-        Math.abs(t.x) > 1e-6 ? (A.w + B.w) / 2 / Math.abs(t.x) : Infinity,
-        Math.abs(t.y) > 1e-6 ? (A.h + B.h) / 2 / Math.abs(t.y) : Infinity
-      );
-      u.push(u[k - 1] + slot[k] * (along + gap));
-    }
-    // 这一串的「重心」（越大、吸得越近的元素越重）对准口子的重心
-    let m = 0;
-    let mu = 0;
-    sizes.forEach((sz, k) => {
-      const w = slot[k] * sz.w * sz.h;
-      m += w;
-      mu += w * u[k];
-    });
-    const uc = m > 0 ? mu / m : 0;
-    const offs = u.map((v) => G.scale(t, v - uc));
-
-    // 整串能放多大：二分查找（口子是凸的，缩小一定放得下，所以可以二分）
-    const fits = (R) => sizes.every((sz, k) => {
-      if (slot[k] <= 0.001) return true;
-      const cx = Gc.x + R * offs[k].x;
-      const cy = Gc.y + R * offs[k].y;
-      const hw = (R * slot[k] * sz.w) / 2;
-      const hh = (R * slot[k] * sz.h) / 2;
-      return insideBox(this, f, cx - hw, cy - hh, cx + hw, cy + hh);
-    });
-    // 放大倍数管的是主角：主角在串里如果写了 scale（比如 1.4），整串最多只能放大到 maxS / 1.4
-    const heroNode = this.chain.find((c) => c.keys.includes(this.heroKey));
-    const probe = {};
-    if (heroNode) heroNode.place(0, 0, 1, gap, 'center', probe);
-    const capR = maxS / ((probe[this.heroKey] && probe[this.heroKey].s) || 1);
-    let R;
-    if (fits(capR)) R = capR;
-    else {
-      let lo = 0;
-      let hi = capR;
-      for (let i = 0; i < 12; i++) {
-        const mid = (lo + hi) / 2;
-        if (fits(mid)) lo = mid;
-        else hi = mid;
-      }
-      R = lo;
-    }
-    R = Math.max(R, MIN_SCALE);
-
-    const seat = {};
-    this.chain.forEach((c, k) => {
-      const sz = sizes[k];
-      const cx = Gc.x + R * offs[k].x;
-      const cy = Gc.y + R * offs[k].y;
-      const out = {};
-      c.place(cx - (R * sz.w) / 2, cy - (R * sz.h) / 2, R, gap, 'center', out);
-      c.keys.forEach((key) => out[key] && (seat[key] = { ...out[key], pull: pulls[k] }));
-    });
-
-    // 还没轮到（或者根本不重要）的元素：被推开一点、变淡，给主角让出地方
-    const aside = (it) => {
-      const away = G.normalize(G.sub(it.home, Gc));
-      const d = this.H * 0.08 * smooth(0, 0.5, o);
-      return [it.home.x + away.x * d, it.home.y + away.y * d, 1 - 0.06 * smooth(0, 0.5, o), it.homeA * (1 - smooth(0.02, 0.3, o))];
-    };
-    const items = this.items.map((it) => {
-      const A = aside(it);
-      const st = it === this.byKey[it.key] && seat[it.key];
-      if (!st) return this.rel(it, ...A);
-      // 被吸过来多少 q：从「让开」的位置一路走到串里的座位；平时看不见的元素边走边显现
-      const q = st.pull;
-      // 透明度到快吸到位时才回到 1：半路上的元素淡淡的，不会和已经坐好的主角抢眼
-      return this.rel(it, lerp(A[0], st.x, q), lerp(A[1], st.y, q), lerp(A[2], st.s, q), lerp(A[3], 1, smooth(0.45, 1, q)));
-    });
-    return { items, roll: riseProgress(o) };
-  }
-
   /** 测试和控制台用：现在每个元素的状态 */
   debug() {
     if (!this.items) return { active: false };
     const hero = this.byKey[this.heroKey];
     return {
       active: true,
-      style: this.style,
       heroKey: this.heroKey,
       o: this.o,
       levels: this.levels,
-      hero: hero && { x: hero.home.x + hero.x, y: hero.home.y + hero.y, s: hero.s, a: hero.a, rot: hero.rot || 0 },
+      hero: hero && { x: hero.home.x + hero.x, y: hero.home.y + hero.y, s: hero.s, a: hero.a },
       rise: this.roll ? this.roll.state() : null, // 数字升起：每一位是什么字、升到哪了
     };
   }
@@ -611,7 +474,7 @@ function build(node, byKey) {
           cur += cs.w + gap * gapK;
         } else if (kind === 'col') {
           const free = (me.w - cs.w) * s;
-          cx = x + (align === 'end' ? free : align === 'center' ? free / 2 : 0);
+          cx = x + (align === 'end' ? free : 0);
           cy = y + cur * s;
           cur += cs.h + gap * gapK;
         } else {
@@ -638,31 +501,6 @@ function visualRect(el, r) {
   range.selectNodeContents(el);
   const v = range.getBoundingClientRect();
   return v.width > 0 && v.height > 0 ? v : r;
-}
-
-/** 多边形的面积重心 */
-function polyCentroid(poly) {
-  let a = 0;
-  let cx = 0;
-  let cy = 0;
-  for (let i = 0; i < poly.length; i++) {
-    const p = poly[i];
-    const q = poly[(i + 1) % poly.length];
-    const cross = p.x * q.y - q.x * p.y;
-    a += cross;
-    cx += (p.x + q.x) * cross;
-    cy += (p.y + q.y) * cross;
-  }
-  if (Math.abs(a) < 1e-6) return poly[0] || { x: 0, y: 0 };
-  return { x: cx / (3 * a), y: cy / (3 * a) };
-}
-
-/** 一个框是不是完整地在口子里（离折痕留 margin，离卡片边留 pad） */
-function insideBox(rv, f, x0, y0, x1, y1) {
-  const { W, H, pad, margin } = rv;
-  if (x0 < pad || y0 < pad || x1 > W - pad || y1 > H - pad) return false;
-  return f.dist({ x: x0, y: y0 }) <= -margin && f.dist({ x: x1, y: y0 }) <= -margin
-    && f.dist({ x: x0, y: y1 }) <= -margin && f.dist({ x: x1, y: y1 }) <= -margin;
 }
 
 // ---------------- 数字逐位升起 ----------------

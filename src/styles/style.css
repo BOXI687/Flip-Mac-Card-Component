@@ -275,13 +275,13 @@ body::before {
 }
 /* 透过纸背看到的反字：内容整个翻页过程中都不变，单独一层，模糊只算一次 */
 .peel-flap__front {
-  filter: blur(var(--peel-blur, 1.2px));
+  filter: blur(var(--peel-blur, 2px));
   will-change: transform;
 }
 .peel-flap__front > .card { position: absolute; inset: 0; }
 /* 纸背。四周一圈极细的暗边：浅色纸角放在浅色壁纸上时，边缘也清楚 */
 .peel-flap__paper {
-  background: var(--peel-paper, rgba(247, 247, 250, 0.84));
+  background: var(--peel-paper, rgba(244, 236, 216, 0.6));
   border-radius: inherit;
   box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.14);
 }
@@ -540,52 +540,13 @@ body::before {
 }
 .tn-switch[aria-checked="true"] { background: #30d158; }
 
-/* ---- 几选一（iOS 分段控件）：选中的那格是浅色底；默认的那格下面有个小点 ---- */
-.tn-seg {
-  display: flex;
-  gap: 2px;
-  margin-top: 10px;
-  padding: 2px;
-  border-radius: 10px;
-  background: rgba(118, 118, 128, 0.24);
-}
-.tn-seg__btn {
-  position: relative;
-  flex: 1;
-  min-height: 44px; /* 手指点得准 */
-  padding: 0 6px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--tn-text2);
-  font: 500 14px var(--font);
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-.tn-seg__btn.is-selected {
-  background: rgba(255, 255, 255, 0.22);
-  color: #fff;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 1px 1px rgba(0, 0, 0, 0.1);
-}
-.tn-seg__btn.is-default::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: 5px;
-  width: 4px;
-  height: 4px;
-  margin-left: -2px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.6;
-}
-
-
 /* ---- 颜色色块 ---- */
 .tn-swatches {
   display: flex;
   justify-content: space-between;
   gap: 8px;
   margin-top: 12px;
+  padding-bottom: 8px; /* 给「默认」的小点留位置 */
 }
 .tn-swatch {
   position: relative;
@@ -613,6 +574,19 @@ body::before {
   box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.3), 0 0 0 3px rgba(40, 40, 42, 1), 0 0 0 5px #fff;
 }
 .tn-swatch.is-selected { color: #fff; }
+/* 默认的那个颜色：名字下面有个小点，调乱了也知道哪个是默认 */
+.tn-swatch.is-default::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -9px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+}
 /* 「自定义」：没选中时显示一圈彩虹，选中后显示选的颜色 */
 .tn-swatch--custom::before {
   background: conic-gradient(#ff453a, #ff9f0a, #ffd60a, #30d158, #64d2ff, #0a84ff, #bf5af2, #ff453a);

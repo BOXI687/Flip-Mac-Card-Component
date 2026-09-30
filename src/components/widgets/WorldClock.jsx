@@ -133,8 +133,7 @@ export default function WorldClock({ size = 'medium', cities }) {
 
 /*
  * 掀开就聚拢（见 engine/reveal.js、CLAUDE.md）：第一个城市的时间挤进口子里。
- *   A 换座位：口子小 → 只有数字时间 → 时间 + 城市 → 小表盘 + 时间 + 城市 + 时差
- *   B 磁铁：数字时间最重要，表盘、城市跟过来；「今天」和别的城市让开变淡
+ *   口子小 → 只有数字时间 → 时间 + 城市 → 小表盘 + 时间 + 城市 + 时差；「今天」和别的城市留在原位、变淡
  */
 WorldClock.peek = {
   medium: {
@@ -144,10 +143,6 @@ WorldClock.peek = {
       { either: [{ col: ['time', 'city'] }, { row: ['time', 'city'] }] },
       { either: [{ row: [{ key: 'dial', scale: 0.8 }, { col: ['time', 'city', 'off'] }] }, { col: [{ key: 'dial', scale: 0.6 }, 'time', 'city'] }] },
     ],
-    magnet: {
-      chain: [{ key: 'time', scale: 1.4 }, { key: 'city', scale: 0.9 }, { key: 'dial', scale: 0.55 }],
-      weight: { time: 1, city: 0.7, dial: 0.55, off: 0.2, day: 0.15, rest: 0 },
-    },
   },
   small: {
     roll: 'time',
@@ -156,9 +151,5 @@ WorldClock.peek = {
       { either: [{ col: ['time', 'city'] }, { row: ['time', 'city'] }] },
       { either: [{ row: [{ key: 'dial', scale: 0.42 }, { col: ['time', 'city'] }] }, { col: [{ key: 'dial', scale: 0.36 }, 'time', 'city'] }] },
     ],
-    magnet: {
-      chain: [{ key: 'time', scale: 1.4 }, { key: 'city', scale: 0.9 }, { key: 'dial', scale: 0.32 }],
-      weight: { time: 1, city: 0.7, dial: 0.5 },
-    },
   },
 };
