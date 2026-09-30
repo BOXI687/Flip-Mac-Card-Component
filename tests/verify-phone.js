@@ -343,7 +343,7 @@ async function setup(browser, initScript, extra = {}) {
     }
     check(`swipe ${id}: other stacks unaffected`, (await others(i)) === othersBefore, `${othersBefore} -> ${await others(i)}`);
   }
-  check('stack sizes: medium 6 cards, smalls 4 cards', (await page.evaluate(() => peels.map((p) => p.cards.length).join())) === '6,4,4');
+  check('stack sizes: every stack holds the 3 peek-animated widgets', (await page.evaluate(() => peels.map((p) => p.cards.length).join())) === '3,3,3');
 
   // 滑到一半的截图（中号往上拖一半，不松手）
   await swipe('stack', -70, 10, 16, false);
@@ -403,7 +403,7 @@ async function setup(browser, initScript, extra = {}) {
     if (i === 0) {
       await drag({ x: B.r - 6, y: B.b - 6 }, { x: B.l + B.w * 0.55, y: B.t + B.h * 0.35 }, 12, 16, false);
       await sleep(40);
-      await page.screenshot({ path: OUT + '13-peel-weather-over-podcasts.png' });
+      await page.screenshot({ path: OUT + '13-peel-weather-over-next.png' });
       await t('touchEnd'); await sleep(1300);
     }
     // 回到第一张

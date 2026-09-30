@@ -67,9 +67,13 @@ const W = {
 // 小号时钟只显示一个城市：左边那叠是伦敦，右边那叠是北京
 const clockSmall = (city) => ({ ...W.clock, props: { cities: [city] } });
 
-/** 三叠小组件，数组里第一个在最上面；往上滑依次看到后面的，最后一张再往上滑回到第一张 */
+/**
+ * 三叠小组件，数组里第一个在最上面；往上滑依次看到后面的，最后一张再往上滑回到第一张。
+ * 现在每叠只放「掀开会动」的三种（电池、时钟、天气），不管掀哪一叠、换到哪一张，下面那张都有动效，方便检查。
+ * 播客、活动、备忘录、日历还在（W.podcasts / W.fitness / W.notes / W.calendar），想放回去就加进下面的数组
+ */
 export const STACKS = {
-  medium: [W.battery, W.clock, W.weather, W.podcasts, W.fitness, W.notes],
-  smallA: [W.battery, W.weather, W.calendar, clockSmall(CITIES[3])],
-  smallB: [W.calendar, clockSmall(CITIES[0]), W.battery, W.weather],
+  medium: [W.battery, W.clock, W.weather],
+  smallA: [W.battery, W.weather, clockSmall(CITIES[3])],
+  smallB: [clockSmall(CITIES[0]), W.battery, W.weather],
 };
