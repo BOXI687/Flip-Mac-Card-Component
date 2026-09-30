@@ -35,9 +35,9 @@ async function setup(browser, initScript, extra = {}) {
   return { ctx, page, errs, t, drag, tap, longPress };
 }
 
-// 壁纸上的一块空白：App 图标那一排和「搜索」之间的正中间（这里什么都没有，和真 iPhone 一样）
+// 壁纸上的一块空白：小组件和「搜索」之间的正中间（这里什么都没有，和真 iPhone 一样）
 const wallSpot = (page) => page.evaluate(() => {
-  const a = document.querySelector('.apps').getBoundingClientRect();
+  const a = document.querySelector('.screen').getBoundingClientRect();
   const s = document.querySelector('.search-pill').getBoundingClientRect();
   return { x: innerWidth / 2, y: (a.bottom + s.top) / 2 };
 });
@@ -65,7 +65,6 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
   // ---- 主屏幕：看起来像真的 iPhone，没有原型的痕迹 ----
   const home = await page.evaluate(() => {
     const r = (e) => e.getBoundingClientRect();
-    const apps = [...document.querySelectorAll('.apps .app')];
     const dock = [...document.querySelectorAll('.dock .app')];
     const pill = r(document.querySelector('.search-pill'));
     const dk = r(document.querySelector('.dock'));
@@ -73,22 +72,31 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
     const texts = [...document.querySelectorAll('.home p, .home button')].map((e) => e.textContent.trim());
     return {
       noProto: !document.querySelector('.hint, #tunerOpen, .tuner-open') && !texts.some((x) => /调参|拖动|滑动/.test(x)),
-      apps: apps.length, dock: dock.length,
-      appNames: apps.map((a) => a.querySelector('.app__name')?.textContent), dockNames: dock.filter((a) => a.querySelector('.app__name')).length,
-      iconW: r(apps[0].querySelector('.app__icon')).width,
-      // 程序坞里的图标和上面那排同一列
-      colsMatch: apps.every((a, i) => Math.abs(r(a).left - r(dock[i]).left) < 0.5),
-      appsTop: r(apps[0]).top, smallB: small.bottom,
-      pill: [pill.top, pill.bottom, pill.width], dockBox: [dk.top, dk.bottom, dk.left, dk.right],
+      apps: document.querySelectorAll('.app').length, dock: dock.length,
+      dockNames: dock.map((a) => a.getAttribute('aria-label')).join(','), visibleText: dock.map((a) => a.textContent.trim()).join(''),
+      // 换算成设计稿的 pt（÷ u），和 Boxi 截图上量的比：图标 63、程序坞 367×103、搜索 61×29、离程序坞 20
+      u: r(document.getElementById('stack')).width / 349.67,
+      iconW: r(dock[0].querySelector('.app__icon')).width,
+      iconCx: dock.map((a) => r(a).left + r(a).width / 2 - dk.left), iconCy: dock.map((a) => r(a).top + r(a).height / 2 - (dk.top + dk.bottom) / 2),
+      smallB: small.bottom,
+      pill: [pill.top, pill.bottom, pill.width, pill.height, pill.left + pill.width / 2], dockBox: [dk.top, dk.bottom, dk.left, dk.right],
+      dockClip: getComputedStyle(document.querySelector('.dock')).clipPath.slice(0, 8),
       fits: document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth,
       stacks: peels.map((p) => [Math.round(p.W), Math.round(p.H)]).join(' '),
       blur: getComputedStyle(document.querySelector('.dock')).backdropFilter,
     };
   });
   check('home screen: no hint text, no 调参 button', home.noProto);
-  check('home screen: 4 app icons with names + 4 dock icons without names', home.apps === 4 && home.dock === 4 && home.appNames.every(Boolean) && home.dockNames === 0, home.appNames.join(','));
-  check('home screen: icon ≈ 62pt (64 × u), dock icons share the grid columns', Math.abs(home.iconW - 64 * 338 / 349.67) < 0.5 && home.colsMatch, `icon ${home.iconW.toFixed(1)}`);
-  check('home screen: order widgets → icons → 搜索 → dock, all on one 393×852 screen', home.appsTop > home.smallB + 30 && home.pill[0] > home.appsTop + 80 && home.pill[1] < home.dockBox[0] && home.dockBox[1] <= 852 - 15 && home.dockBox[1] >= 852 - 18 && home.fits, JSON.stringify(home));
+  check('home screen: no app-icon row, only the 4 dock icons (电话 信息 相机 音乐, no visible names)', home.apps === 4 && home.dock === 4 && home.dockNames === '电话,信息,相机,音乐' && home.visibleText === '', home.dockNames);
+  {
+    const u = home.u, pt = (v) => v / u, near = (v, want, tol = 0.6) => Math.abs(pt(v) - want) < tol;
+    const [dt, db, dl, dr] = home.dockBox, [pt0, pb, pw, ph, pcx] = home.pill;
+    const cx = home.iconCx.map(pt);
+    check('home screen: dock 367×103 pt, centred, 17 pt from the bottom, continuous-corner clip', near(dr - dl, 367) && near(db - dt, 103) && Math.abs((dl + dr) / 2 - 393 / 2) < 0.6 && near(852 - db, 17) && home.dockClip === 'polygon(', `dock ${pt(dr - dl).toFixed(1)}×${pt(db - dt).toFixed(1)} pt, bottom ${pt(852 - db).toFixed(1)} pt, clip ${home.dockClip}`);
+    check('home screen: dock icons 63 pt, centres 88.3 pt apart (51 / 139 / 228 / 316 from the dock edge), vertically centred', near(home.iconW, 63) && [51.1, 139.4, 227.7, 316].every((w, i) => Math.abs(cx[i] - w) < 1) && home.iconCy.every((y) => Math.abs(y) < 0.6), `icon ${pt(home.iconW).toFixed(1)} pt, centres ${cx.map((x) => x.toFixed(1)).join(' ')}`);
+    check('home screen: 搜索 pill 61×29 pt, centred, 20 pt above the dock', near(pw, 61) && near(ph, 29) && Math.abs(pcx - 393 / 2) < 0.6 && near(dt - pb, 20), `pill ${pt(pw).toFixed(1)}×${pt(ph).toFixed(1)} pt, gap ${pt(dt - pb).toFixed(1)} pt`);
+    check('home screen: order widgets → (empty wallpaper) → 搜索 → dock, all on one 393×852 screen', pt0 > home.smallB + 150 && home.fits, JSON.stringify(home));
+  }
   check('home screen: widget stacks unchanged (338×158, 158×158 ×2)', home.stacks === '338,158 158,158 158,158', home.stacks);
   check('home screen: dock is real glass (backdrop blur)', /blur/.test(home.blur), home.blur);
   await page.screenshot({ path: OUT + '01b-home-screen.png' });
@@ -116,10 +124,10 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
   // 在小组件中间、App 图标、搜索、程序坞上长按：不打开，小组件也不换
   const notWall = await page.evaluate(() => {
     const c = (sel) => { const r = document.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
-    return [c('#stack'), c('.apps .app__icon'), c('.search-pill'), c('.dock .app:nth-child(3)'), c('.widget__name')];
+    return [c('#stack'), c('.dock .app:nth-child(2)'), c('.search-pill'), c('.dock'), c('.widget__name')];
   });
   for (const p of notWall) { await longPress(p); await sleep(200); }
-  check('long-press on a widget / icon / 搜索 / dock / widget name does not open the panel (and no swipe)', !(await sheetOpen(page)) && (await page.evaluate(() => peels.every((p) => p.index === 0 && p.state === 'idle'))));
+  check('long-press on a widget / dock icon / 搜索 / dock / widget name does not open the panel (and no swipe)', !(await sheetOpen(page)) && (await page.evaluate(() => peels.every((p) => p.index === 0 && p.state === 'idle'))));
   check('long-press: no text selection or callout (user-select / touch-callout none)', await page.evaluate(() => { const b = getComputedStyle(document.body); return (b.userSelect === 'none' || b.webkitUserSelect === 'none') && String(window.getSelection()) === ''; }));
 
   // ---- 打开面板（长按壁纸） ----
@@ -205,12 +213,12 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
   await page.screenshot({ path: OUT + '03-panel-appearance.png' });
 
   // 壁纸：默认橄榄（名字下有小点、选中）；点「夜幕」→ 页面、电池的假玻璃都换；存起来
-  const wp0 = await page.evaluate(() => ({ def: [...document.querySelectorAll('.tn-swatch--wp.is-default')].map((b) => b.getAttribute('aria-label')).join(), sel: [...document.querySelectorAll('.tn-swatch--wp.is-selected')].map((b) => b.getAttribute('aria-label')).join(), html: document.documentElement.dataset.wallpaper, glass: getComputedStyle(document.querySelector('#stack .card--battery')).backgroundImage }));
+  const wp0 = await page.evaluate(() => ({ def: [...document.querySelectorAll('.tn-swatch--wp.is-default')].map((b) => b.getAttribute('aria-label')).join(), sel: [...document.querySelectorAll('.tn-swatch--wp.is-selected')].map((b) => b.getAttribute('aria-label')).join(), html: document.documentElement.dataset.wallpaper, glass: getComputedStyle(document.querySelector('#stackSmallA .card--battery')).backgroundImage }));
   check('wallpaper: 橄榄 is the default and selected', wp0.def === '橄榄' && wp0.sel === '橄榄' && wp0.html === 'olive' && (await page.evaluate(() => PeelStack.DEFAULTS.wallpaper)) === 'olive', JSON.stringify(wp0).slice(0, 120));
   await page.evaluate(() => document.querySelector('.tn-swatch--wp[aria-label="夜幕"]').scrollIntoView({ block: 'center' }));
   const wsw = await page.evaluate(() => { const r = document.querySelector('.tn-swatch--wp[aria-label="夜幕"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 20 }; });
   await tap(wsw.x, wsw.y); await sleep(100);
-  const wp1 = await page.evaluate(() => ({ p: peels.map((s) => s.params.wallpaper).join(), html: document.documentElement.dataset.wallpaper, bg: getComputedStyle(document.documentElement).backgroundColor, glass: getComputedStyle(document.querySelector('#stack .card--battery')).backgroundImage, saved: JSON.parse(localStorage.getItem(Tuner.STORE_KEY)).wallpaper }));
+  const wp1 = await page.evaluate(() => ({ p: peels.map((s) => s.params.wallpaper).join(), html: document.documentElement.dataset.wallpaper, bg: getComputedStyle(document.documentElement).backgroundColor, glass: getComputedStyle(document.querySelector('#stackSmallA .card--battery')).backgroundImage, saved: JSON.parse(localStorage.getItem(Tuner.STORE_KEY)).wallpaper }));
   check('wallpaper: 夜幕 applies to the page, every stack, the battery glass, and is saved', wp1.p === 'dusk,dusk,dusk' && wp1.html === 'dusk' && wp1.bg === 'rgb(12, 20, 34)' && wp1.glass !== wp0.glass && wp1.saved === 'dusk', JSON.stringify(wp1).slice(0, 160));
   await page.screenshot({ path: OUT + '03b-wallpaper-dusk.png' });
 
@@ -425,7 +433,9 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
     }
     check(`swipe ${id}: other stacks unaffected`, (await others(i)) === othersBefore, `${othersBefore} -> ${await others(i)}`);
   }
-  check('stack sizes: every stack holds the 3 peek-animated widgets', (await page.evaluate(() => peels.map((p) => p.cards.length).join())) === '3,3,3');
+  // 中号：世界时钟 天气 播客 健身 备忘录；左小号：日历 电池；右小号：天气 时钟（伦敦）
+  const order = await page.evaluate(() => peels.map((p) => p.cards.map((c) => c.getAttribute('aria-label')).join(' ')));
+  check('stack contents: medium 5 (世界时钟 天气 播客 健身 备忘录), small A 2 (日历 电池), small B 2 (天气 世界时钟)', order.join(' | ') === '世界时钟 天气 播客·待播清单 健身·活动 备忘录 | 日历 电池 | 天气 世界时钟', order.join(' | '));
 
   // 滑到一半的截图（中号往上拖一半，不松手）
   await swipe('stack', -70, 10, 16, false);
@@ -455,10 +465,11 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
     check('horizontal drag in the middle does not switch', s.index === 0 && s.sw === 'idle' && s.transforms === '', JSON.stringify(s));
   }
   // 滑到别的卡以后，掀角偷看的是「顺序里的下一张」；四个角都试，每一叠都试
+  // 中号滑到第 3 张（index 2），小号只有 2 张：滑到第 2 张（index 1，下一张绕回第 1 张）
   for (let i = 0; i < 3; i++) {
     const id = stackIds[i];
-    await swipe(id, -110); await sleep(900);
-    await swipe(id, -110); await sleep(900); // 现在最上面是第 3 张（index 2）
+    const k = Math.min(2, (await stackInfo(i)).n - 1);
+    for (let j = 0; j < k; j++) { await swipe(id, -110); await sleep(900); }
     const B = await boxOf(id);
     for (const c of ['tl', 'tr', 'br', 'bl']) {
       const from = { tl: { x: B.l + 6, y: B.t + 6 }, tr: { x: B.r - 6, y: B.t + 6 }, br: { x: B.r - 6, y: B.b - 6 }, bl: { x: B.l + 6, y: B.b - 6 } }[c];
@@ -480,17 +491,16 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
       await t('touchEnd');
       await sleep(1300);
       const e = await stackInfo(i);
-      check(`${id} at card 3: ${c} corner peeks the next card (${m.under}) and returns`, m.s === 'dragging' && m.name === c && m.index === 2 && m.underOk && m.othersHidden && m.cloneOk && m.frac > 0.05 && e.peel === 'idle' && e.index === 2 && e.transforms === '', JSON.stringify({ m, e: [e.peel, e.index] }));
+      check(`${id} at card ${k + 1}: ${c} corner peeks the next card (${m.under}) and returns`, m.s === 'dragging' && m.name === c && m.index === k && m.underOk && m.othersHidden && m.cloneOk && m.frac > 0.05 && e.peel === 'idle' && e.index === k && e.transforms === '', JSON.stringify({ m, e: [e.peel, e.index] }));
     }
     if (i === 0) {
       await drag({ x: B.r - 6, y: B.b - 6 }, { x: B.l + B.w * 0.55, y: B.t + B.h * 0.35 }, 12, 16, false);
       await sleep(40);
-      await page.screenshot({ path: OUT + '13-peel-weather-over-next.png' });
+      await page.screenshot({ path: OUT + '13-peel-over-next.png' });
       await t('touchEnd'); await sleep(1300);
     }
     // 回到第一张
-    await swipe(id, 110); await sleep(900);
-    await swipe(id, 110); await sleep(900);
+    for (let j = 0; j < k; j++) { await swipe(id, 110); await sleep(900); }
     check(`${id}: back to first card`, (await stackInfo(i)).index === 0);
   }
   check('no horizontal overflow (after swipes)', (await overflow()) === 0);

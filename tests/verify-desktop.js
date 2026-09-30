@@ -76,13 +76,13 @@ async function desktop(browser, w, h) {
   const dots = await rectOf(page, '#dots');
   const dock = await rectOf(page, '.dock');
   const pill = await rectOf(page, '.search-pill');
-  const apps = await rectOf(page, '.apps');
+  const icons = await page.evaluate(() => [...document.querySelectorAll('.app')].map((e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; }));
   const smallA = await rectOf(page, '#stackSmallA');
   const smallB = await rectOf(page, '#stackSmallB');
   const allDots = await page.evaluate(() => [...document.querySelectorAll('.dots, .widget__name')].map((e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; }));
-  check(`${tag}: sidebar overlaps nothing (stack, small stacks, all dots + names, icons, 搜索, dock)`, ![st, smallA, smallB, dots, dock, pill, apps, ...allDots].some((r) => overlap(r, sb)) && Math.max(...allDots.map((d) => d.r)) + 12 <= sb.l, `stack r ${st.r.toFixed(0)}, dots r ${dots.r.toFixed(0)}, sidebar l ${sb.l.toFixed(0)}`);
-  // 窗口矮于 730 时那排 App 图标省掉（放不下），其余照常
-  check(`${tag}: everything fits on screen (dock at the bottom, icons only when tall enough)`, dock.b <= h - 15 && dock.b >= h - 18 && smallA.b < pill.t && (h >= 730 ? apps.h > 60 && apps.t > smallA.b && apps.b < pill.t : apps.h === 0) && Math.abs((dock.l + dock.r) / 2 - (st.l + st.r) / 2) < 1, `dock ${dock.t.toFixed(0)}–${dock.b.toFixed(0)}, apps h ${apps.h.toFixed(0)}`);
+  check(`${tag}: sidebar overlaps nothing (stack, small stacks, all dots + names, 搜索, dock)`, ![st, smallA, smallB, dots, dock, pill, ...allDots].some((r) => overlap(r, sb)) && Math.max(...allDots.map((d) => d.r)) + 12 <= sb.l, `stack r ${st.r.toFixed(0)}, dots r ${dots.r.toFixed(0)}, sidebar l ${sb.l.toFixed(0)}`);
+  // 没有 App 图标那一排了：小组件 → 空着的壁纸 → 搜索 → 程序坞（4 个图标都在程序坞里）
+  check(`${tag}: everything fits on screen (dock at the bottom, 4 icons inside it)`, dock.b <= h - 15 && dock.b >= h - 18 && smallA.b + 100 < pill.t && pill.b < dock.t && icons.length === 4 && icons.every((r) => r.l > dock.l && r.r < dock.r && r.t > dock.t && r.b < dock.b) && Math.abs((dock.l + dock.r) / 2 - (st.l + st.r) / 2) < 1 && Math.abs((pill.l + pill.r) / 2 - (st.l + st.r) / 2) < 1, `dock ${dock.t.toFixed(0)}–${dock.b.toFixed(0)}, pill ${pill.t.toFixed(0)}–${pill.b.toFixed(0)}, icons ${icons.length}`);
   const pad = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.home')).paddingRight));
   const mid = (16 + (w - pad)) / 2;
   check(`${tag}: stack centred in remaining space`, Math.abs((st.l + st.r) / 2 - mid) < 1, `stack centre ${((st.l + st.r) / 2).toFixed(1)} vs region centre ${mid.toFixed(1)}`);
@@ -293,9 +293,9 @@ async function desktop(browser, w, h) {
     await page.goto(URL); await page.evaluate(() => localStorage.setItem('peel-tuner-sidebar', '1')); await page.reload(); await sleep(2600);
     check('phone: sheet closed on load', !(await isOpen(page)));
     await page.screenshot({ path: `${OUT}phone-393x852-closed.png` });
-    // 手指长按壁纸空白处（App 图标那排和「搜索」之间）
+    // 手指长按壁纸空白处（小组件和「搜索」之间）
     const cdp = await ctx.newCDPSession(page);
-    const spot = await page.evaluate(() => { const a = document.querySelector('.apps').getBoundingClientRect(); const s = document.querySelector('.search-pill').getBoundingClientRect(); return { x: innerWidth / 2, y: (a.bottom + s.top) / 2 }; });
+    const spot = await page.evaluate(() => { const a = document.querySelector('.screen').getBoundingClientRect(); const s = document.querySelector('.search-pill').getBoundingClientRect(); return { x: innerWidth / 2, y: (a.bottom + s.top) / 2 }; });
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: spot.x, y: spot.y, id: 1 }] });
     await sleep(1150);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });

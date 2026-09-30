@@ -31,11 +31,10 @@
      没有安全区的地方（电脑、Safari 里）至少留 68，看起来和手机上一样 */
   --home-top: max(calc(env(safe-area-inset-top) + 9px), 68px);
 
-  /* App 图标、搜索、程序坞（MEASURED：Boxi 的主屏幕截图，402pt 宽的 iPhone，按 --u 换算到别的宽度）：
-     图标 64、圆角约 14；4 列和小组件左右对齐（两边各缩进 3）；
-     程序坞 高 98、比小组件两边各宽 12、离屏幕底 17、圆角约 32；搜索胶囊 高 30，离程序坞 18 */
-  --icon: calc(var(--u) * 64);
-  --dock-pad: calc(var(--u) * 17);
+  /* 搜索、程序坞（MEASURED：Boxi 的主屏幕截图，402pt 宽的 iPhone，按 --u 换算到别的宽度）：
+     程序坞 367×103、离屏幕底 17、圆角约 46（和屏幕圆角差不多同心），比小组件两边各宽 8.67；
+     里面 4 个图标 63，间距 25.3（中心相隔 88.3），上下居中；搜索胶囊 61×29，离程序坞 20 */
+  --icon: calc(var(--u) * 63);
 
   --green: #30d158;
   --red: #ff453a;
@@ -362,49 +361,8 @@ body::before {
 .show-debug .peel-debug { display: block; }
 .show-debug .card { outline: 1px dashed rgba(255, 255, 255, 0.5); }
 
-/* ================= App 图标 =================
- * 一排 4 个，和小组件的左右边对齐（两边各缩进 3pt，MEASURED），离上面那排小组件的距离和两排小组件之间一样。
- * 图标下面的名字和小组件的名字同一个样式（Apple 设计稿里两者是同一种文字） */
-.apps {
-  flex: none;
-  display: flex;
-  justify-content: space-between;
-  width: var(--widget-w);
-  margin-top: calc(var(--row-gap) - var(--name-gap) - var(--name-h));
-  padding: 0 calc(var(--u) * 3);
-}
-.app {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--name-gap);
-  width: var(--icon);
-}
-.app__icon {
-  display: block;
-  width: var(--icon);
-  height: var(--icon);
-  /* 很淡的投影：图标像是轻轻浮在壁纸上（INFERRED） */
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.14));
-  transition: filter 0.2s ease-out;
-}
-/* 按下时：和 iOS 一样变暗一点（不放大，也不跳转）；松手后 0.2 秒亮回来 */
-.app:active .app__icon {
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.14)) brightness(0.72);
-  transition: none;
-}
-.app__name {
-  margin: 0;
-  height: var(--name-h);
-  font-size: calc(var(--u) * 12);
-  line-height: var(--name-h);
-  font-weight: 510;
-  text-shadow: 0 2px 25px #000; /* 和小组件的名字一样：很散的一圈黑影，远看几乎没有，但浅色壁纸上字不会糊 */
-  white-space: nowrap;
-}
-
 /* ================= 搜索胶囊 + 程序坞 =================
+ * 照 Boxi 的 iPhone 截图做的（402pt 宽，MEASURED，按 --u 换算）。
  * margin-top: auto：把这一块推到屏幕最底下（中间的空白和真 iPhone 一样是空着的壁纸）。
  * 两个都是「玻璃」：真的背景模糊（backdrop-filter）。这里可以用，因为它们下面只有壁纸，
  * 不像小组件那样叠着别的卡片 */
@@ -414,45 +372,54 @@ body::before {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: calc(var(--u) * 18);
+  gap: calc(var(--u) * 20); /* 搜索胶囊底边 → 程序坞顶边 20 */
   /* 程序坞离屏幕底 17。有 Home 横条安全区（34）时，程序坞下沿在安全区中间，和真 iPhone 一样 */
   padding-bottom: max(calc(var(--u) * 17), calc(env(safe-area-inset-bottom) - 17px));
 }
+/* 「搜索」：61×29 的小胶囊，玻璃比壁纸稍微暗一点，一圈很细的亮边；放大镜 + 「搜索」，半透明白字 15pt */
 .search-pill {
   display: flex;
   align-items: center;
-  gap: calc(var(--u) * 4);
-  height: calc(var(--u) * 30);
-  padding: 0 calc(var(--u) * 12) 0 calc(var(--u) * 10);
-  font-size: calc(var(--u) * 13);
-  font-weight: 590;
-  letter-spacing: 0.01em; /* 玻璃上的小字稍微放开一点，更清楚 */
-  color: rgba(255, 255, 255, 0.92);
+  justify-content: center;
+  gap: calc(var(--u) * 3);
+  width: calc(var(--u) * 61);
+  height: calc(var(--u) * 29);
+  font-size: calc(var(--u) * 15);
+  font-weight: 510;
+  color: rgba(255, 255, 255, 0.72);
+  white-space: nowrap;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-  -webkit-backdrop-filter: blur(16px) saturate(1.6);
-  backdrop-filter: blur(16px) saturate(1.6);
-  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.35), inset 0 0 0 0.5px rgba(255, 255, 255, 0.12);
+  background: rgba(20, 20, 20, 0.1);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.3), inset 0 0 0 0.5px rgba(255, 255, 255, 0.16);
 }
 .search-pill svg {
-  width: calc(var(--u) * 12);
-  height: calc(var(--u) * 12);
+  flex: none;
+  width: calc(var(--u) * 13);
+  height: calc(var(--u) * 13);
 }
+/* 程序坞：一块「液态玻璃」（iOS 26/27）—— 背景模糊 + 很淡的白，只比壁纸稍微亮一点、灰一点。
+   形状（连续圆角）由 App.jsx 用 clip-path 裁出来，边缘亮线是里面那个 SVG（.dock__rim）。
+   不加外投影：clip-path 会把它裁掉，真 iPhone 上也几乎看不到 */
 .dock {
+  position: relative;
   display: flex;
-  justify-content: space-between;
-  /* 比小组件两边各宽 12；图标和上面那排同一列（左右内边距 = 12 + 3） */
-  width: calc(var(--widget-w) + var(--u) * 24);
-  padding: var(--dock-pad) calc(var(--u) * 15);
-  border-radius: calc(var(--u) * 32);
-  /* iOS 26 以后的程序坞是一块「液态玻璃」：很淡的白 + 背景模糊 + 提亮，边缘一圈亮线（上边更亮，像光打在玻璃边上） */
-  background: rgba(255, 255, 255, 0.13);
-  -webkit-backdrop-filter: blur(24px) saturate(1.8);
-  backdrop-filter: blur(24px) saturate(1.8);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.32),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.16),
-    0 8px 30px rgba(0, 0, 0, 0.12);
+  justify-content: center;
+  align-items: center;
+  gap: calc(var(--u) * 25.3);
+  width: calc(var(--widget-w) + var(--u) * 17.33); /* = 367（小组件 349.67 + 两边各 8.67） */
+  height: calc(var(--u) * 103);
+  background: rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(24px) saturate(1.1);
+  backdrop-filter: blur(24px) saturate(1.1);
+}
+.dock__rim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 /* 系统设置里打开「降低透明度」：玻璃换成实心的深色 */
 @media (prefers-reduced-transparency: reduce) {
@@ -463,9 +430,22 @@ body::before {
     backdrop-filter: none;
   }
 }
-/* 窗口太矮（比如 1280×720 的电脑浏览器），一屏放不下：先省掉那排 App 图标，小组件和程序坞不动 */
-@media (max-height: 729px) {
-  .apps { display: none; }
+/* 程序坞里的图标（画法在 components/AppIcon.jsx）：63pt，没有名字 */
+.app {
+  position: relative;
+  width: var(--icon);
+  height: var(--icon);
+}
+.app__icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transition: filter 0.2s ease-out;
+}
+/* 按下时：和 iOS 一样变暗一点（不放大，也不跳转）；松手后 0.2 秒亮回来 */
+.app:active .app__icon {
+  filter: brightness(0.72);
+  transition: none;
 }
 
 /* ================= 调参面板（由 engine/tuner.js 生成） ================= */
@@ -479,7 +459,7 @@ body::before {
   left: 0;
   right: 0;
   bottom: 0;
-  /* 面板顶边 = 最下面一排小组件的名字再往下 16px（--home-top 是 .home 的上边距）。面板会盖住 App 图标和程序坞 */
+  /* 面板顶边 = 最下面一排小组件的名字再往下 16px（--home-top 是 .home 的上边距）。面板会盖住搜索和程序坞 */
   top: calc(var(--home-top) + var(--screen-h) + 16px);
   display: flex;
   flex-direction: column;

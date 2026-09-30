@@ -1,18 +1,32 @@
 /*
  * App.jsx —— 整个页面：假装是一块真的 iPhone 主屏幕
  *
- * 从上到下：一个中号叠放 → 一行两个小号叠放 → 一排 4 个 App 图标 → 「搜索」小胶囊 → 程序坞（4 个图标）。
+ * 从上到下：一个中号叠放 → 一行两个小号叠放 → （空着的壁纸）→ 「搜索」小胶囊 → 程序坞（4 个图标）。
  * 页面上没有任何「原型」的痕迹（没有说明文字、没有调参按钮）：
  * 调参面板藏起来了，长按壁纸空白处约 0.9 秒打开（engine/tuner.js 里的「长按壁纸」）。
  *
  * 每一叠都是一个 <PeelStack>，各有各的引擎，互不影响；调参面板的参数对所有叠都生效。
- * 叠里放哪几张、什么内容，主屏幕上放哪些图标，都在 data.js 里改。
+ * 叠里放哪几张、什么内容，程序坞里放哪些图标，都在 data.js 里改。
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import PeelStack from './components/PeelStack.jsx';
 import AppIcon from './components/AppIcon.jsx';
-import { STACKS, HOME_APPS } from './data.js';
+import { STACKS, DOCK_APPS } from './data.js';
+import { squirclePolygon } from './engine/geometry.js';
 import { Tuner } from './engine/tuner.js';
+
+/*
+ * 程序坞的形状：iOS 的连续圆角（和小组件、图标同一套数学）。
+ * 程序坞的宽、高、圆角都按 --u 等比缩放，所以形状永远一样：只算一次，写成百分比，
+ *   · clip-path（裁出玻璃的形状）用百分比
+ *   · 边缘亮线的 SVG 用同样的点（viewBox 就是设计稿的 367×103）
+ * 尺寸见 style.css「搜索胶囊 + 程序坞」
+ */
+const DOCK_W = 367;
+const DOCK_H = 103;
+const DOCK_SHAPE = squirclePolygon(DOCK_W, DOCK_H, 46, 0.6, 24); // 24：角大，多取点才圆滑（默认 8 会看出棱角）
+const DOCK_CLIP = `polygon(${DOCK_SHAPE.map((p) => `${((p.x / DOCK_W) * 100).toFixed(3)}% ${((p.y / DOCK_H) * 100).toFixed(3)}%`).join(',')})`;
+const DOCK_PATH = 'M' + DOCK_SHAPE.map((p) => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join('L') + 'Z';
 
 // 版本标签：A / B 版本在 index.html 的 <html data-variant-label> 里写上名字，页面顶部会显示，免得看混
 const VARIANT_LABEL = document.documentElement.dataset.variantLabel;
@@ -20,6 +34,7 @@ const VARIANT_LABEL = document.documentElement.dataset.variantLabel;
 export default function App() {
   const engines = useRef({}); // 三叠的引擎，由 <PeelStack> 装好后交过来
   const homeRef = useRef(null);
+  const rimId = `${useId()}dockRim`; // 程序坞亮线的渐变名字（全页面唯一）
   const keep = (id) => (engine) => {
     engines.current[id] = engine;
   };
@@ -102,25 +117,31 @@ export default function App() {
         </div>
       </div>
 
-      {/* 一排 App 图标：和小组件对齐的 4 列（尺寸、间距见 style.css「App 图标」） */}
-      <div className="apps">
-        {HOME_APPS.grid.map((a) => (
-          <AppIcon key={a.app} {...a} />
-        ))}
-      </div>
-
-      {/* 屏幕最下面：「搜索」小胶囊 + 程序坞。margin-top: auto 把它们推到底 */}
+      {/* 屏幕最下面：「搜索」小胶囊 + 程序坞。margin-top: auto 把它们推到底（中间空着的就是壁纸，和真 iPhone 一样） */}
       <div className="dock-area">
         <div className="search-pill" role="img" aria-label="搜索">
           <svg viewBox="0 0 16 16" aria-hidden="true">
-            <circle cx="6.8" cy="6.8" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.9" />
-            <path d="M10.3 10.3 L 14 14" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+            <circle cx="6.8" cy="6.8" r="4.9" fill="none" stroke="currentColor" strokeWidth="1.7" />
+            <path d="M10.4 10.4 L 14.2 14.2" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
           </svg>
           搜索
         </div>
-        <div className="dock">
-          {HOME_APPS.dock.map((a) => (
-            <AppIcon key={a.app} {...a} showName={false} />
+        <div className="dock" style={{ clipPath: DOCK_CLIP }}>
+          {/* 玻璃边缘的细亮线：上边最亮，下边一点点，两侧几乎没有（iOS 26/27 的 Liquid Glass）。
+              线宽 1.5，一半在形状外面被裁掉，看起来是一条贴边的细线 */}
+          <svg className="dock__rim" viewBox={`0 0 ${DOCK_W} ${DOCK_H}`} preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id={rimId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#fff" stopOpacity="0.55" />
+                <stop offset="0.3" stopColor="#fff" stopOpacity="0.14" />
+                <stop offset="0.7" stopColor="#fff" stopOpacity="0.06" />
+                <stop offset="1" stopColor="#fff" stopOpacity="0.2" />
+              </linearGradient>
+            </defs>
+            <path d={DOCK_PATH} fill="none" stroke={`url(#${rimId})`} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+          </svg>
+          {DOCK_APPS.map((a) => (
+            <AppIcon key={a.app} {...a} />
           ))}
         </div>
       </div>

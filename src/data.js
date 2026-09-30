@@ -64,37 +64,30 @@ const W = {
   calendar: { kind: 'calendar', label: '日历', app: '日历', Widget: Calendar, props: {} },
 };
 
-// 小号时钟只显示一个城市：左边那叠是伦敦，右边那叠是北京
+// 小号时钟只显示一个城市（现在右边那叠放的是伦敦）
 const clockSmall = (city) => ({ ...W.clock, props: { cities: [city] } });
 
 /**
  * 三叠小组件，数组里第一个在最上面；往上滑依次看到后面的，最后一张再往上滑回到第一张。
- * 现在每叠只放「掀开会动」的三种（电池、时钟、天气），不管掀哪一叠、换到哪一张，下面那张都有动效，方便检查。
- * 播客、活动、备忘录、日历还在（W.podcasts / W.fitness / W.notes / W.calendar），想放回去就加进下面的数组
+ * 按 Boxi 自己手机的主屏幕来排（不是每叠都塞所有小组件）：
+ *   中号：世界时钟 → 天气 → 播客 → 健身·活动 → 备忘录
+ *   左边小号：日历 → 电池；右边小号：天气 → 时钟（伦敦）
+ * 掀开时「信息聚拢」只有电池、时钟、天气有，别的卡在下面时不动。
  */
 export const STACKS = {
-  medium: [W.battery, W.clock, W.weather],
-  smallA: [W.battery, W.weather, clockSmall(CITIES[3])],
-  smallB: [clockSmall(CITIES[0]), W.battery, W.weather],
+  medium: [W.clock, W.weather, W.podcasts, W.fitness, W.notes],
+  smallA: [W.calendar, W.battery],
+  smallB: [W.weather, clockSmall(CITIES[3])],
 };
 
 /**
- * 主屏幕上的 App 图标（只是样子，点了什么也不做）。
- *   app  → 用哪个图标（画法在 components/AppIcon.jsx）
- *   name → 图标下面的名字（程序坞里的图标和 iOS 一样不写名字，这里的 name 只给读屏软件念）
- * 小组件下面一排 4 个，最下面的程序坞 4 个
+ * 程序坞里的 4 个 App 图标（只是样子，点了只会暗一下，什么也不做）。
+ *   app  → 用哪个图形（画法在 components/AppIcon.jsx）
+ *   name → App 名。程序坞里和 iOS 一样不写名字，这里的 name 只给读屏软件念
  */
-export const HOME_APPS = {
-  grid: [
-    { app: 'photos', name: '照片' },
-    { app: 'maps', name: '地图' },
-    { app: 'notes', name: '备忘录' },
-    { app: 'settings', name: '设置' },
-  ],
-  dock: [
-    { app: 'phone', name: '电话' },
-    { app: 'messages', name: '信息' },
-    { app: 'camera', name: '相机' },
-    { app: 'music', name: '音乐' },
-  ],
-};
+export const DOCK_APPS = [
+  { app: 'phone', name: '电话' },
+  { app: 'messages', name: '信息' },
+  { app: 'camera', name: '相机' },
+  { app: 'music', name: '音乐' },
+];
