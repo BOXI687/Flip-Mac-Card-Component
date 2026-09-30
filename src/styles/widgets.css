@@ -235,90 +235,224 @@
   line-height: calc(var(--u) * 14);
   font-weight: 600;
 }
+/* 「16:00 起有雨」：温度右边的空位（中号才有）。字 13 半粗、前面一个雨云小图标 */
+.wx__rain {
+  position: absolute;
+  left: calc(var(--u) * 106);
+  top: calc(var(--u) * 53);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 5);
+  font-size: calc(var(--u) * 13);
+  line-height: calc(var(--u) * 16);
+  font-weight: 600;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.92);
+}
+.wx__rain-icon { width: calc(var(--u) * 19); height: calc(var(--u) * 19); }
 /* 小号：从上往下一列 */
 .wx--small .wx__temp { margin-top: calc(var(--u) * 2.6); }
 .wx--small .wx__icon { margin: calc(var(--u) * -4.5) 0 0 calc(var(--u) * -1.9); }
 .wx--small .wx__cond { margin-top: calc(var(--u) * 2.8); }
 .wx--small .wx__hl { margin-top: calc(var(--u) * 6.4); }
 
-/* ================= 日历（小号） =================
- * MEASURED（Boxi 的截图）：日期数字高 25（≈ 字号 35），农历和星期是 11 号字竖排，
- * 中间两条细灰线；「今天无日程」15 号灰字。白底 */
-.card--calendar { --card-bg: #fff; }
+/* ================= 日历（小号，深色） =================
+ * MEASURED（Boxi 的截图：深色日历小组件，有一个蓝色描边的日程卡；截图 920px 宽、中号 798px = 349.67u，
+ * 所以 1u ≈ 2.28px）：星期 12 号灰字、中心离顶 19；日期数字高 ≈ 20（字号 30），字底离顶 52.6；
+ * 「今天」标签 12.5 号灰字，中心离顶 100；日程卡：左右各离边 11、顶 113.5、高 38.5、圆角 13、描边 1.2，
+ * 名字（13.5 半粗）和时间（13）左边距 19、行距 15。颜色：底 #212124（加上玻璃层顶上变亮）、描边和字用蓝色。
+ * 日程卡的描边是单独一个元素（.cal__event），名字和时间盖在它上面（原因见 Calendar.jsx） */
+.card--calendar { --card-bg: #212124; --cal-accent: #409cff; }
 .cal {
   position: relative;
   height: 100%;
-  padding: calc(var(--u) * 17.7) calc(var(--u) * 19) 0;
-  color: #000;
+  color: #fff;
 }
-.cal__head {
-  display: flex;
-  align-items: flex-start;
+.cal p { margin: 0; position: absolute; left: calc(var(--u) * 19); white-space: nowrap; }
+.cal__week {
+  top: calc(var(--u) * 12.3);
+  font-size: calc(var(--u) * 12);
+  line-height: calc(var(--u) * 14);
+  font-weight: 500;
+  color: rgba(235, 235, 245, 0.6);
 }
 .cal__date {
-  font-size: calc(var(--u) * 35);
+  top: calc(var(--u) * 27);
+  font-size: calc(var(--u) * 30);
   line-height: 1;
   font-weight: 400;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
-.cal__col {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  height: calc(var(--u) * 24.6);
-  margin: calc(var(--u) * 3.5) 0 0 calc(var(--u) * 4.6);
-  padding-left: calc(var(--u) * 4.8);
-  border-left: 0.5px solid rgba(60, 60, 67, 0.22);
-  font-size: calc(var(--u) * 11);
-  line-height: calc(var(--u) * 13.8);
+.cal__section {
+  top: calc(var(--u) * 92);
+  font-size: calc(var(--u) * 12.5);
+  line-height: calc(var(--u) * 16);
   font-weight: 500;
+  color: rgba(235, 235, 245, 0.6);
 }
-.cal__col i { font-style: normal; }
-.cal__col i:first-child { margin-top: calc(var(--u) * -0.5); }
-.cal__lunar { color: rgba(60, 60, 67, 0.6); }
-.cal__week { color: #ff3b30; font-weight: 600; margin-left: calc(var(--u) * 4.8); }
-.cal__empty {
+.cal__event {
   position: absolute;
-  left: calc(var(--u) * 19);
-  top: calc(var(--u) * 94.7);
-  margin: 0;
-  font-size: calc(var(--u) * 15);
-  line-height: calc(var(--u) * 18);
-  color: rgba(60, 60, 67, 0.6);
-}
-/* 有日程时（INFERRED，凭 iOS 日历小组件的样子）：左边一根橙色竖条，右边日程名字（15 号半粗黑字）
- * 和时间（13 号灰字），名字的顶和「今天无日程」对齐 */
-.cal__bar {
-  position: absolute;
-  left: calc(var(--u) * 19);
-  top: calc(var(--u) * 96.5);
-  width: calc(var(--u) * 3.5);
-  height: calc(var(--u) * 31);
-  border-radius: calc(var(--u) * 1.75);
-  background: #ff9f0a;
+  left: calc(var(--u) * 11);
+  right: calc(var(--u) * 11);
+  top: calc(var(--u) * 113.5);
+  height: calc(var(--u) * 38.5);
+  border: calc(var(--u) * 1.2) solid var(--cal-accent);
+  border-radius: calc(var(--u) * 13);
 }
 .cal__title,
 .cal__time {
-  position: absolute;
-  left: calc(var(--u) * 29);
-  right: calc(var(--u) * 12);
-  margin: 0;
-  white-space: nowrap;
+  right: calc(var(--u) * 19);
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--cal-accent);
 }
 .cal__title {
-  top: calc(var(--u) * 94.7);
-  font-size: calc(var(--u) * 15);
-  line-height: calc(var(--u) * 18);
+  top: calc(var(--u) * 117.5);
+  font-size: calc(var(--u) * 13.5);
+  line-height: calc(var(--u) * 15);
   font-weight: 600;
 }
 .cal__time {
-  top: calc(var(--u) * 112.7);
+  top: calc(var(--u) * 132.5);
+  font-size: calc(var(--u) * 13);
+  line-height: calc(var(--u) * 15);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ================= 待办（小号，深色） =================
+ * INFERRED（凭 iOS「提醒事项」小组件的样子；黄色和备忘录一样是 #ffd60a）：底 #1c1c1e 和时钟一样，
+ * 标题行 14 号半粗黄字，3 条待办每条 30 高、中间 0.5px 细线，空心圆 15、字 13；第一条（最紧急）圆是黄的、字更粗 */
+.card--todo { --card-bg: #1c1c1e; --todo-accent: #ffd60a; }
+.todo {
+  position: relative;
+  height: 100%;
+  color: #fff;
+}
+.todo__head {
+  position: absolute;
+  left: calc(var(--u) * 18);
+  top: calc(var(--u) * 16);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 6);
+  height: calc(var(--u) * 18);
+  color: var(--todo-accent);
+  font-size: calc(var(--u) * 14);
+  font-weight: 600;
+}
+.todo__glyph { width: calc(var(--u) * 15); height: calc(var(--u) * 15); }
+.todo__list {
+  position: absolute;
+  left: calc(var(--u) * 18);
+  right: calc(var(--u) * 12);
+  top: calc(var(--u) * 43);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.todo__item {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 9);
+  height: calc(var(--u) * 30);
+  border-top: 0.5px solid rgba(255, 255, 255, 0.12);
+  font-size: calc(var(--u) * 13);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.88);
+}
+.todo__item:first-child { border-top: 0; }
+.todo__box {
+  flex: none;
+  width: calc(var(--u) * 15);
+  height: calc(var(--u) * 15);
+  border: calc(var(--u) * 1.4) solid rgba(235, 235, 245, 0.34);
+  border-radius: 50%;
+}
+.todo__item--first { font-weight: 600; color: #fff; }
+.todo__item--first .todo__box { border-color: var(--todo-accent); }
+.todo__text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.todo__more {
+  position: absolute;
+  left: calc(var(--u) * 18);
+  top: calc(var(--u) * 139);
+  margin: 0;
+  font-size: calc(var(--u) * 11.5);
+  line-height: calc(var(--u) * 14);
+  color: rgba(235, 235, 245, 0.45);
+}
+
+/* ================= 地图（中号） =================
+ * INFERRED（凭 Boxi 截图里地图小组件的样子：深蓝灰的底、比底亮一点的街道、深蓝的水、深绿的公园、
+ * 大写的街名、左下角一块深色圆角小面板）。街道、街名、形状都是编的。画布 350×164，和 u 一个尺度 */
+.card--map { --card-bg: #39434f; }
+.map { position: relative; height: 100%; color: #fff; }
+.map__art { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.map__land { fill: #39434f; }
+.map__water { fill: #1f3f78; }
+.map__park { fill: #2e4a48; }
+.map__minor, .map__major, .map__avenue, .map__route, .map__route-casing { fill: none; }
+.map__minor { stroke: #465162; stroke-width: 0.9; }
+.map__major { stroke: #57647a; stroke-width: 1.8; }
+.map__avenue { stroke: #687a91; stroke-width: 2.6; }
+/* 街名：大写、字距拉开，字底下垫一圈底色，压在街上时把线「挖」掉一点，和参考图一样 */
+.map__name {
+  font: 600 7.4px var(--font);
+  letter-spacing: 0.09em;
+  fill: #aab7ca;
+  paint-order: stroke;
+  stroke: #39434f;
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+.map__route-casing { stroke: #1c4fb5; stroke-width: 7.6; stroke-linecap: round; stroke-linejoin: round; }
+.map__route { stroke: #4f9dff; stroke-width: 4.6; stroke-linecap: round; stroke-linejoin: round; }
+.map__start-ring { fill: #2f7ff0; stroke: #fff; stroke-width: 1.6; }
+.map__start { fill: #fff; }
+.map__pin { fill: #ff453a; stroke: rgba(0, 0, 0, 0.28); stroke-width: 0.6; }
+.map__pin-dot { fill: #fff; }
+/* 左下角的面板：几乎不透明的深色（下面的地图本来就是不透明的，不用模糊，掀角时省力） */
+.map__panel {
+  position: absolute;
+  left: calc(var(--u) * 8);
+  bottom: calc(var(--u) * 8);
+  width: calc(var(--u) * 152);
+  padding: calc(var(--u) * 11) calc(var(--u) * 13);
+  border-radius: calc(var(--u) * 19);
+  background: rgba(28, 29, 33, 0.94);
+}
+.map__panel p { margin: 0; white-space: nowrap; }
+.map__dest {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 5);
   font-size: calc(var(--u) * 13);
   line-height: calc(var(--u) * 16);
-  color: rgba(60, 60, 67, 0.6);
+  font-weight: 600;
+}
+.map__dest svg { width: calc(var(--u) * 12); height: calc(var(--u) * 12); color: #4f9dff; }
+.map__eta { display: flex; align-items: baseline; gap: calc(var(--u) * 3); margin-top: calc(var(--u) * 2) !important; }
+.map__min {
+  font-size: calc(var(--u) * 34);
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
+}
+.map__unit { font-size: calc(var(--u) * 15); font-weight: 600; }
+.map__depart {
+  margin-top: calc(var(--u) * 4) !important;
+  font-size: calc(var(--u) * 12);
+  line-height: calc(var(--u) * 15);
+  color: rgba(235, 235, 245, 0.68);
+  font-variant-numeric: tabular-nums;
+}
+.map__note {
+  margin-top: calc(var(--u) * 2) !important;
+  font-size: calc(var(--u) * 11.5);
+  line-height: calc(var(--u) * 14);
+  font-weight: 600;
+  color: var(--green);
 }
 
 /* ================= 播客·待播清单（中号） =================
@@ -454,6 +588,33 @@
   font-weight: 600;
 }
 
+/* 小号：圆环在上面居中（外径 84），下面两行字也居中：「186/500大卡」22 号红字、「还差 314 大卡」12 号灰字 */
+.fit--small { padding: 0; text-align: center; }
+.fit--small .fit__ring { width: calc(var(--u) * 84); height: calc(var(--u) * 84); margin: calc(var(--u) * 15) auto 0; }
+.fit__sm-text { font-family: ui-rounded, "SF Pro Rounded", var(--font); }
+.fit__sm-text p { margin: 0; white-space: nowrap; }
+.fit__sm-move {
+  margin-top: calc(var(--u) * 9) !important;
+  font-size: calc(var(--u) * 22);
+  line-height: 1;
+  font-weight: 600;
+  color: var(--move);
+}
+.fit__sm-move small {
+  margin-left: calc(var(--u) * 2.5);
+  font-family: var(--font);
+  font-size: calc(var(--u) * 12);
+  font-weight: 600;
+}
+.fit__sm-left {
+  margin-top: calc(var(--u) * 5) !important;
+  font-family: var(--font);
+  font-size: calc(var(--u) * 12);
+  line-height: calc(var(--u) * 14);
+  font-weight: 500;
+  color: #aeb4bd;
+}
+
 /* ================= 备忘录（中号） =================
  * MEASURED（Boxi 的截图）：黄色的头高 44.5（渐变 #FFD301 → #FBBC01），文件夹图标 + 「备忘录」白字；
  * 一排 5.1 间距的小灰点；下面三行 13 号黑字，每行 37.1 高，中间 0.5px 的细线，左右边距 18 */
@@ -563,17 +724,17 @@
   top: calc(50% - 0.55em);
   text-align: center;
 }
-/* 日历：大号的开始时间，从原来那行小时间（顶 112.7、行高 16）的中间出发 */
+/* 日历：大号的开始时间，从日程卡里那行小时间（顶 132.5、行高 15）的中间出发，蓝色 */
 .cal__peek-time {
-  left: calc(var(--u) * 29);
-  top: calc(var(--u) * 120.7 - 0.5em);
+  left: calc(var(--u) * 19);
+  top: calc(var(--u) * 140 - 0.5em);
   margin: 0;
   font-size: calc(var(--u) * 22);
   line-height: 1;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
-  color: #000;
+  color: var(--cal-accent);
 }
 /* 播客：标题的两行版（和原标题一样的字，只是窄一点、折成两行），和原标题左上角对齐；
  * 「还剩24分钟」和那行灰字一样大，贴着那行灰字的底 */

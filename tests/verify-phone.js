@@ -213,12 +213,12 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
   await page.screenshot({ path: OUT + '03-panel-appearance.png' });
 
   // 壁纸：默认橄榄（名字下有小点、选中）；点「夜幕」→ 页面、电池的假玻璃都换；存起来
-  const wp0 = await page.evaluate(() => ({ def: [...document.querySelectorAll('.tn-swatch--wp.is-default')].map((b) => b.getAttribute('aria-label')).join(), sel: [...document.querySelectorAll('.tn-swatch--wp.is-selected')].map((b) => b.getAttribute('aria-label')).join(), html: document.documentElement.dataset.wallpaper, glass: getComputedStyle(document.querySelector('#stackSmallA .card--battery')).backgroundImage }));
+  const wp0 = await page.evaluate(() => ({ def: [...document.querySelectorAll('.tn-swatch--wp.is-default')].map((b) => b.getAttribute('aria-label')).join(), sel: [...document.querySelectorAll('.tn-swatch--wp.is-selected')].map((b) => b.getAttribute('aria-label')).join(), html: document.documentElement.dataset.wallpaper, glass: getComputedStyle(document.querySelector('#stackSmallB .card--battery')).backgroundImage }));
   check('wallpaper: 橄榄 is the default and selected', wp0.def === '橄榄' && wp0.sel === '橄榄' && wp0.html === 'olive' && (await page.evaluate(() => PeelStack.DEFAULTS.wallpaper)) === 'olive', JSON.stringify(wp0).slice(0, 120));
   await page.evaluate(() => document.querySelector('.tn-swatch--wp[aria-label="夜幕"]').scrollIntoView({ block: 'center' }));
   const wsw = await page.evaluate(() => { const r = document.querySelector('.tn-swatch--wp[aria-label="夜幕"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 20 }; });
   await tap(wsw.x, wsw.y); await sleep(100);
-  const wp1 = await page.evaluate(() => ({ p: peels.map((s) => s.params.wallpaper).join(), html: document.documentElement.dataset.wallpaper, bg: getComputedStyle(document.documentElement).backgroundColor, glass: getComputedStyle(document.querySelector('#stackSmallA .card--battery')).backgroundImage, saved: JSON.parse(localStorage.getItem(Tuner.STORE_KEY)).wallpaper }));
+  const wp1 = await page.evaluate(() => ({ p: peels.map((s) => s.params.wallpaper).join(), html: document.documentElement.dataset.wallpaper, bg: getComputedStyle(document.documentElement).backgroundColor, glass: getComputedStyle(document.querySelector('#stackSmallB .card--battery')).backgroundImage, saved: JSON.parse(localStorage.getItem(Tuner.STORE_KEY)).wallpaper }));
   check('wallpaper: 夜幕 applies to the page, every stack, the battery glass, and is saved', wp1.p === 'dusk,dusk,dusk' && wp1.html === 'dusk' && wp1.bg === 'rgb(12, 20, 34)' && wp1.glass !== wp0.glass && wp1.saved === 'dusk', JSON.stringify(wp1).slice(0, 160));
   await page.screenshot({ path: OUT + '03b-wallpaper-dusk.png' });
 
@@ -411,7 +411,7 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
       clip: p.el.style.clipPath.slice(0, 12),
     };
   }, i);
-  const APP = { 电池: '电池', 世界时钟: '时钟', 天气: '天气', '播客·待播清单': '播客', '健身·活动': '健身', 备忘录: '备忘录', 日历: '日历' };
+  const APP = { 地图: '地图', 天气: '天气', 日历: '日历', 待办: '待办', '健身·活动': '健身', 设备电量: '电池' };
   const others = (i) => page.evaluate((i) => peels.filter((_, k) => k !== i).map((p) => `${p.index}${p.swiper.state}${p.state}`).join(','), i);
   // 从卡片中间竖着拖 dy（负数 = 往上）
   const swipe = async (id, dy, steps = 12, delay = 16, release = true) => {
@@ -433,9 +433,9 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
     }
     check(`swipe ${id}: other stacks unaffected`, (await others(i)) === othersBefore, `${othersBefore} -> ${await others(i)}`);
   }
-  // 中号：世界时钟 天气 播客 健身 备忘录；左小号：日历 电池；右小号：天气 时钟（伦敦）
+  // 三叠，每叠一对：中号 地图 天气；左小号 日历 待办；右小号 健身 设备电量
   const order = await page.evaluate(() => peels.map((p) => p.cards.map((c) => c.getAttribute('aria-label')).join(' ')));
-  check('stack contents: medium 5 (世界时钟 天气 播客 健身 备忘录), small A 2 (日历 电池), small B 2 (天气 世界时钟)', order.join(' | ') === '世界时钟 天气 播客·待播清单 健身·活动 备忘录 | 日历 电池 | 天气 世界时钟', order.join(' | '));
+  check('stack contents: three pairs — medium 2 (地图 天气), small A 2 (日历 待办), small B 2 (健身 设备电量)', order.join(' | ') === '地图 天气 | 日历 待办 | 健身·活动 设备电量', order.join(' | '));
 
   // 滑到一半的截图（中号往上拖一半，不松手）
   await swipe('stack', -70, 10, 16, false);
@@ -465,7 +465,7 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
     check('horizontal drag in the middle does not switch', s.index === 0 && s.sw === 'idle' && s.transforms === '', JSON.stringify(s));
   }
   // 滑到别的卡以后，掀角偷看的是「顺序里的下一张」；四个角都试，每一叠都试
-  // 中号滑到第 3 张（index 2），小号只有 2 张：滑到第 2 张（index 1，下一张绕回第 1 张）
+  // 每叠都只有 2 张：滑到第 2 张（index 1，下一张绕回第 1 张）
   for (let i = 0; i < 3; i++) {
     const id = stackIds[i];
     const k = Math.min(2, (await stackInfo(i)).n - 1);

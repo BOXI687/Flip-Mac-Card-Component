@@ -1,7 +1,7 @@
 /*
  * 电池小组件（Batteries）
  *   中号：4 个圆环排一行，下面写百分比
- *   小号：4 个圆环排成 2×2，不写百分比
+ *   小号：圆环排成 2×2（最多 4 个），不写百分比。现在放的是「戴在身上的设备」：手表、AirPods、耳机盒 3 个
  *
  * 组件（component）就像 Figma 里的 Component：画一次，到处用。
  * size 这个属性（prop）就像 Figma 的 Variant：同一个组件，切到 'medium' 或 'small' 长得不一样。
@@ -32,6 +32,14 @@ const ICONS = {
       <rect x="8.2" y="8.4" width="2.3" height="10.4" rx="1.15" />
       <ellipse cx="16.4" cy="7.6" rx="3.3" ry="3.5" />
       <rect x="13.5" y="8.4" width="2.3" height="10.4" rx="1.15" />
+    </svg>
+  ),
+  // 手表：圆角的表身（空心）+ 上下两段表带 + 右边的表冠。通用的手表，不是任何一个牌子的
+  watch: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="5.9" y="6.3" width="12.2" height="11.4" rx="3.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path fill="currentColor" d="M9.1 5.5 9.8 2.4A1 1 0 0 1 10.8 1.7H13.2A1 1 0 0 1 14.2 2.4L14.9 5.5ZM9.1 18.5H14.9L14.2 21.6A1 1 0 0 1 13.2 22.3H10.8A1 1 0 0 1 9.8 21.6Z" />
+      <rect x="18.4" y="10.3" width="1.5" height="3.2" rx="0.75" fill="currentColor" />
     </svg>
   ),
   // 充电盒：圆角盒子，挖出盖子的缝和前面的指示灯

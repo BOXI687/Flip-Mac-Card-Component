@@ -6,9 +6,12 @@
  * 数据是编的（src/data.js 里的 WEATHER），但时间是真的：
  * 逐小时预报从「下一个整点」开始排，日出 / 日落落在这几个小时里就插一格，和 iOS 一样。
  * 天黑以后（日落到日出）背景换成夜空的深蓝，图标换成月亮。
+ * 下雨：story.js 说「几点起有雨」，逐小时预报从那一格起画雨的图标，
+ * 中号里还有一行小字「16:00 起有雨」（两边用的是同一个数，不会对不上）。
  */
 import { useId } from 'react';
 import { useNow } from '../../hooks/useNow.js';
+import { storyAt } from '../../story.js';
 
 // ---------------- 编出来的「一天的天气」 ----------------
 const toHours = ([h, m]) => h + m / 60;
@@ -34,13 +37,15 @@ function skyAt(w, hour) {
 
 const SKY_TEXT = { sun: '晴朗', cloudSun: '大部晴朗', moon: '晴朗', cloudMoon: '局部多云' };
 
-/** 下面那排预报：从下一个整点开始的 6 格，日出 / 日落在范围内就插进去 */
-function hourlyFrom(w, now) {
+/** 下面那排预报：从下一个整点开始的 6 格，日出 / 日落在范围内就插进去。rainFrom：从这个钟点起的格子画雨 */
+function hourlyFrom(w, now, rainFrom) {
   const start = now.getHours() + 1;
   const cols = [];
   for (let i = 0; i < 6; i++) {
     const h = (start + i) % 24;
-    cols.push({ key: `h${h}`, hour: start + i, label: `${h}时`, icon: skyAt(w, h), temp: tempAt(w, h) });
+    // 下雨的钟点不管白天黑夜都是雨云图标；日出 / 日落那一格（下面插进来的）照旧
+    const icon = start + i >= rainFrom ? 'rain' : skyAt(w, h);
+    cols.push({ key: `h${h}`, hour: start + i, label: `${h}时`, icon, temp: tempAt(w, h) });
   }
   for (const [name, hm] of [['sunset', w.sunset], ['sunrise', w.sunrise]]) {
     const nowH = now.getHours() + now.getMinutes() / 60;
@@ -164,6 +169,17 @@ function WxIcon({ kind, className, peek }) {
         </BehindCloud>
       )}
       {kind === 'cloud' && <Cloud dy={-1} />}
+      {/* 雨：云往上挪一点，下面三道斜着的蓝色雨丝 */}
+      {kind === 'rain' && (
+        <>
+          <Cloud dy={-2.6} />
+          <g stroke="#5ac8fa" strokeWidth="1.8" strokeLinecap="round">
+            <line x1="9.4" y1="18.6" x2="8.4" y2="21.6" />
+            <line x1="13.4" y1="18.6" x2="12.4" y2="21.6" />
+            <line x1="17.4" y1="18.6" x2="16.4" y2="21.6" />
+          </g>
+        </>
+      )}
       {kind === 'sunset' && <SunEdge up={false} />}
       {kind === 'sunrise' && <SunEdge up />}
     </svg>
@@ -208,6 +224,7 @@ export default function Weather({ size = 'medium', data }) {
   const sky = skyAt(data, hour);
   const temp = tempAt(data, hour);
   const cls = `wx wx--${size}${night ? ' wx--night' : ''}`;
+  const { rain } = storyAt(now);
 
   const city = (
     <div className="wx__city" data-peek="city">
@@ -235,6 +252,11 @@ export default function Weather({ size = 'medium', data }) {
           {city}
           <div className="wx__temp" data-peek="temp">{temp}°</div>
         </div>
+        {/* 「16:00 起有雨」：温度右边的空位。偷看时只变淡（"rest"） */}
+        <div className="wx__rain" data-peek="rest">
+          <WxIcon kind="rain" className="wx__rain-icon" />
+          {rain.hint}
+        </div>
         <div className="wx__today">
           <WxIcon kind={sky} className="wx__icon" peek="icon" />
           <div className="wx__cond" data-peek="cond">{SKY_TEXT[sky]}</div>
@@ -242,7 +264,7 @@ export default function Weather({ size = 'medium', data }) {
         </div>
       </div>
       <div className="wx__hours" data-peek="hours">
-        {hourlyFrom(data, now).map((c) => (
+        {hourlyFrom(data, now, rain.fromHour).map((c) => (
           <div key={c.key} className="wx__hour">
             <div className="wx__time">{c.label}</div>
             <WxIcon kind={c.icon} className="wx__hicon" />
