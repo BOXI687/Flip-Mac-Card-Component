@@ -186,9 +186,9 @@ async function desktop(browser, w, h) {
       const pa = probe[key] ? await page.evaluate(`(${probe[key]})()`) : null;
       check(`sidebar slider ${label} changes value`, before !== after && pb === pa ? !probe[key] : before !== after, `${before} -> ${after}${pa ? '; ' + pb + ' -> ' + pa : ''}`);
     }
-    await page.evaluate(() => document.querySelector('.tn-swatch[aria-label="黑"]').scrollIntoView({ block: 'center' }));
-    await page.click('.tn-swatch[aria-label="黑"]');
-    check('sidebar: paper colour swatch applies', await page.evaluate(() => peel.params.paperColor === '#1c1c1e'));
+    await page.evaluate(() => document.querySelector('.tn-swatch[aria-label="暖白纸"]').scrollIntoView({ block: 'center' }));
+    await page.click('.tn-swatch[aria-label="暖白纸"]');
+    check('sidebar: paper colour swatch applies', await page.evaluate(() => peel.params.paperColor === '#f4ecd8'));
     const sws = [await page.$('.tn-switch[aria-label="打开时自动提示"]'), await page.$('.tn-switch[aria-label="几何辅助线"]')];
     const hint0 = await page.evaluate(() => peel.params.hintOnLoad);
     await sws[0].scrollIntoViewIfNeeded(); await sws[0].click();

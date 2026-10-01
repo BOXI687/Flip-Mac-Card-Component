@@ -85,10 +85,10 @@ const SECTIONS = [
         key: 'paperColor', label: '纸背颜色', type: 'color',
         hint: '掀起来那一角，纸的背面是什么颜色',
         swatches: [
+          { name: '深色纸', color: '#1c1c1e' },
           { name: '暖白纸', color: '#f4ecd8' },
           { name: '白', color: '#f7f7fa' },
           { name: '浅灰', color: '#d8d8dd' },
-          { name: '黑', color: '#1c1c1e' },
         ],
       },
       {

@@ -101,12 +101,12 @@ export const STACKS = {
 
 /**
  * 程序坞里的 4 个 App 图标（只是样子，点了只会暗一下，什么也不做）。
- *   app  → 用哪个图形（画法在 components/AppIcon.jsx）
+ *   app  → 用哪张图（Boxi 从 Figma 社区文件里挑的矢量图标，放在 src/assets/dock/，对应关系见 components/AppIcon.jsx）
  *   name → App 名。程序坞里和 iOS 一样不写名字，这里的 name 只给读屏软件念
  */
 export const DOCK_APPS = [
   { app: 'phone', name: '电话' },
   { app: 'messages', name: '信息' },
   { app: 'camera', name: '相机' },
-  { app: 'music', name: '音乐' },
+  { app: 'gmail', name: 'Gmail' },
 ];

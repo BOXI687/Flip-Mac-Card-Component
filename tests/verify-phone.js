@@ -87,7 +87,7 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
     };
   });
   check('home screen: no hint text, no 调参 button', home.noProto);
-  check('home screen: no app-icon row, only the 4 dock icons (电话 信息 相机 音乐, no visible names)', home.apps === 4 && home.dock === 4 && home.dockNames === '电话,信息,相机,音乐' && home.visibleText === '', home.dockNames);
+  check('home screen: no app-icon row, only the 4 dock icons (电话 信息 相机 Gmail, no visible names)', home.apps === 4 && home.dock === 4 && home.dockNames === '电话,信息,相机,Gmail' && home.visibleText === '', home.dockNames);
   {
     const u = home.u, pt = (v) => v / u, near = (v, want, tol = 0.6) => Math.abs(pt(v) - want) < tol;
     const [dt, db, dl, dr] = home.dockBox, [pt0, pb, pw, ph, pcx] = home.pill;
@@ -202,14 +202,14 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
   const dampAfterTap = await page.evaluate(() => peel.params.returnDamping);
   check('tap on slider track jumps to position', Math.abs(dampAfterTap - 0.68) < 0.02, `damping ${dampAfterTap}`);
 
-  // 颜色：默认的纸色（暖白纸）下面有小点，一开始就是选中的
+  // 颜色：默认的纸色（深色纸）下面有小点，一开始就是选中的
   const swDef = await page.evaluate(() => ({ def: [...document.querySelectorAll('.tn-swatch.is-default:not(.tn-swatch--wp)')].map((b) => b.getAttribute('aria-label')), sel: [...document.querySelectorAll('.tn-swatch.is-selected:not(.tn-swatch--wp)')].map((b) => b.getAttribute('aria-label')), color: PeelStack.DEFAULTS.paperColor }));
-  check('paper colour: 暖白纸 #f4ecd8 is the default swatch and selected', swDef.def.join() === '暖白纸' && swDef.sel.join() === '暖白纸' && swDef.color === '#f4ecd8', JSON.stringify(swDef));
-  await page.evaluate(() => document.querySelector('.tn-swatch[aria-label="黑"]').scrollIntoView({ block: 'center' }));
-  const sw = await page.evaluate(() => { const r = document.querySelector('.tn-swatch[aria-label="黑"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 15 }; });
+  check('paper colour: 深色纸 #1c1c1e is the default swatch and selected', swDef.def.join() === '深色纸' && swDef.sel.join() === '深色纸' && swDef.color === '#1c1c1e', JSON.stringify(swDef));
+  await page.evaluate(() => document.querySelector('.tn-swatch[aria-label="暖白纸"]').scrollIntoView({ block: 'center' }));
+  const sw = await page.evaluate(() => { const r = document.querySelector('.tn-swatch[aria-label="暖白纸"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 15 }; });
   await tap(sw.x, sw.y);
   const paper = await page.evaluate(() => [peel.params.paperColor, getComputedStyle(document.querySelector('.peel-flap__paper')).backgroundColor]);
-  check('paper colour swatch applies', paper[0] === '#1c1c1e' && paper[1].startsWith('rgba(28, 28, 30'), paper.join(' / '));
+  check('paper colour swatch applies', paper[0] === '#f4ecd8' && paper[1].startsWith('rgba(244, 236, 216'), paper.join(' / '));
   await page.screenshot({ path: OUT + '03-panel-appearance.png' });
 
   // 壁纸：默认橄榄（名字下有小点、选中）；点「夜幕」→ 页面、电池的假玻璃都换；存起来
@@ -513,7 +513,7 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
   await page.evaluate(() => localStorage.setItem(Tuner.STORE_KEY, '{"maxLift":99,"cornerHit":"x","bogus":1,"paperColor":"red","wallpaper":"neon"}'));
   await page.reload(); await sleep(300);
   const sane = await page.evaluate(() => [peel.params.maxLift, peel.params.cornerHit, 'bogus' in peel.params, peel.params.paperColor, peel.params.wallpaper, document.documentElement.dataset.wallpaper]);
-  check('bad saved values are sanitised (unknown wallpaper → 橄榄)', sane[0] === 0.95 && sane[1] === 0.45 && !sane[2] && sane[3] === '#f4ecd8' && sane[4] === 'olive' && sane[5] === 'olive', sane.join(','));
+  check('bad saved values are sanitised (unknown wallpaper → 橄榄)', sane[0] === 0.95 && sane[1] === 0.45 && !sane[2] && sane[3] === '#1c1c1e' && sane[4] === 'olive' && sane[5] === 'olive', sane.join(','));
   await page.evaluate(() => localStorage.clear());
   check('no console/page errors (main run)', errs.length === 0, errs.join(' | '));
   await ctx.close();

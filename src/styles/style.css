@@ -333,11 +333,12 @@ body::before {
   will-change: transform;
 }
 .peel-flap__front > .card { position: absolute; inset: 0; }
-/* 纸背。四周一圈极细的暗边：浅色纸角放在浅色壁纸上时，边缘也清楚 */
+/* 纸背。四周一圈极细的边（--peel-rim 由 peel.js 按纸的深浅给）：
+   浅色纸是淡暗线（浅色纸角放在浅色壁纸上时，边缘也清楚）；深色纸是淡亮线（深色纸角放在深色卡片上，轮廓不会融进去） */
 .peel-flap__paper {
-  background: var(--peel-paper, rgba(244, 236, 216, 0.6));
+  background: var(--peel-paper, rgba(28, 28, 30, 0.6));
   border-radius: inherit;
-  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--peel-rim, inset 0 0 0 0.75px rgba(255, 255, 255, 0.24));
 }
 
 /* 光影渐变：和卡片一样大，渐变的角度和位置由 JS 每帧计算（见 peel.js 的 alongGradient） */
@@ -384,15 +385,16 @@ body::before {
   gap: calc(var(--u) * 3);
   width: calc(var(--u) * 61);
   height: calc(var(--u) * 29);
-  font-size: calc(var(--u) * 15);
-  font-weight: 510;
-  color: rgba(255, 255, 255, 0.72);
+  font-size: calc(var(--u) * 14);
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.78);
   white-space: nowrap;
   border-radius: 999px;
-  background: rgba(20, 20, 20, 0.1);
+  background: rgba(20, 20, 20, 0.06);
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
-  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.3), inset 0 0 0 0.5px rgba(255, 255, 255, 0.16);
+  /* 整圈都有一道细亮线（Boxi 的截图里很清楚），上沿再亮一点 */
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.4), inset 0 0 0 0.75px rgba(255, 255, 255, 0.28);
 }
 .search-pill svg {
   flex: none;
@@ -410,7 +412,8 @@ body::before {
   gap: calc(var(--u) * 25.3);
   width: calc(var(--widget-w) + var(--u) * 17.33); /* = 367（小组件 349.67 + 两边各 8.67） */
   height: calc(var(--u) * 103);
-  background: rgba(255, 255, 255, 0.1);
+  /* 只比壁纸亮一丁点（Boxi 的真主屏幕：程序坞几乎是透明的，不是「磨砂白」）；模糊保留，但壁纸本来就很糊，看不出来 */
+  background: rgba(255, 255, 255, 0.02);
   -webkit-backdrop-filter: blur(24px) saturate(1.1);
   backdrop-filter: blur(24px) saturate(1.1);
 }

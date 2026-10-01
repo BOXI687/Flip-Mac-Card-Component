@@ -1,0 +1,12 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="App logo 001">
+<path id="Vector" fill-rule="evenodd" clip-rule="evenodd" d="M91.4062 0C108.75 0 120 11.25 120 28.5938V91.4062C120 108.75 108.75 120 91.4062 120H28.5938C11.25 120 0 108.75 0 91.4062V28.5938C0 11.25 11.25 0 28.5938 0H91.4062Z" fill="url(#paint0_linear_0_4)"/>
+<path id="Vector_2" fill-rule="evenodd" clip-rule="evenodd" d="M36.3112 88.6948C23.824 82.2212 15.5193 70.727 15.5193 57.6262C15.5193 37.3981 35.3185 20.9999 59.7421 20.9999C84.1657 20.9999 103.965 37.3981 103.965 57.6262C103.965 77.8544 84.1657 94.2526 59.7421 94.2526C55.634 94.2526 51.6566 93.7886 47.8823 92.9205C46.2744 94.0406 43.4201 95.9278 40.365 97.4717C33.9357 100.721 26.9101 103.002 31.394 98.4134C35.688 94.0196 36.4679 90.7422 36.3112 88.6948Z" fill="white"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_4" x1="0" y1="0" x2="0" y2="120" gradientUnits="userSpaceOnUse">
+<stop stop-color="#64FA7E"/>
+<stop offset="1" stop-color="#0CBA29"/>
+</linearGradient>
+</defs>
+</svg>

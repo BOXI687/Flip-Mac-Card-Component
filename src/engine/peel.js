@@ -49,17 +49,17 @@ const DEFAULTS = {
   cornerHit: 0.45, // 角落热区半径 = 卡片高度 × 这个比例
   pressLift: 1, // 手指刚按住角落时，纸角先自己翘起一点（倍数，0 = 不翘），告诉人「抓住了」
   // ---- 外观 ----
-  paperColor: '#f4ecd8', // 纸背颜色（暖白纸）
+  paperColor: '#1c1c1e', // 纸背颜色（深色纸；暖白纸 #f4ecd8 是另一个选项）
   paperOpacity: 0.6, // 纸背不透明度：越小，透过纸背看到的反字越清楚
   flapBlur: 2, // 透过纸背看到的字有多模糊（px）
-  highlight: 0.75, // 卷曲高光强度（1 = 100%）
+  highlight: 0.3, // 卷曲高光强度（1 = 100%）
   flapShadow: 0.38, // 掀起的纸角投到下面的影子有多深（0~1）
   underShade: 1, // 下层卡片上阴影的强度（1 = 100%）
   // ---- 其他 ----
   hintOnLoad: false, // 打开页面时自动掀一下右下角（App.jsx 读取）
   wallpaper: 'olive', // 主屏幕壁纸：'olive' 橄榄 / 'dusk' 夜幕 / 'dawn' 晨光（tuner.js 把它写到 <html data-wallpaper>，样子在 style.css）
   // ---- 上下滑切换（swipe.js 读取；放在这里是为了和上面的参数一起存、一起复制） ----
-  swipeResponse: 0.42, // 切换到下一张用多久（秒），越小越快
+  swipeResponse: 0.43, // 切换到下一张用多久（秒），越小越快
   swipeDamping: 0.86, // 切换停下时的阻尼：1 = 不晃，越小越「弹」
   // ---- 掀开时，下面那张卡的信息怎么动（reveal.js 读取） ----
   peekGather: true, // 掀开时信息聚拢：true = 按座位表挤进口子里，false = 下面那张卡不动
@@ -178,6 +178,9 @@ export class PeelStack {
     const st = this.el.style;
     st.setProperty('--peel-paper', hexToRgba(p.paperColor, p.paperOpacity));
     st.setProperty('--peel-blur', `${p.flapBlur}px`);
+    // 纸边的细线：浅色纸用一圈很淡的暗线（放在浅色壁纸上也看得清）；
+    // 深色纸放在深色卡片（日历、健身）上，暗线看不见，反过来用一圈很淡的亮线，纸角的轮廓才不会「融」进卡片里
+    st.setProperty('--peel-rim', isDark(p.paperColor) ? 'inset 0 0 0 0.75px rgba(255, 255, 255, 0.24)' : 'inset 0 0 0 0.5px rgba(0, 0, 0, 0.14)');
   }
 
   measure() {
@@ -710,6 +713,13 @@ function alongGradient(W, H, M, u, stops) {
 }
 
 /** '#rrggbb' + 不透明度 → 'rgba(r,g,b,a)' */
+// 这个颜色算「深色」吗？（粗略的亮度：绿色占的比重最大，和人眼一样）
+function isDark(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  const n = m ? parseInt(m[1], 16) : 0xf7f7fa;
+  return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 < 0.45;
+}
+
 function hexToRgba(hex, a) {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
   const n = m ? parseInt(m[1], 16) : 0xf7f7fa;

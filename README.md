@@ -15,8 +15,8 @@
   左边小号 **今天**：日历（设计站会几点）↔ 待办（会前要做完什么）；右边小号 **随身**：健身（今天动了多少）↔ 设备电量（手表、AirPods、耳机盒）
 - **内容跟着真实时间走**（`src/story.js`）：下一场会永远是「下一个整点 / 半点、离现在 35～65 分钟」，路线「现在出发，几点到」= 现在 + 22 分钟
   （12 点前去公司、以后回家），下雨永远是 2～3 小时以后的整点，和 iPhone 状态栏的时间对得上
-- 程序坞和「搜索」照真 iPhone 截图量的尺寸做（iOS 26/27 的液态玻璃）；程序坞里 4 个图标（电话、信息、相机、音乐）是「透明」风格：
-  磨砂玻璃底 + 一个白色的通用图形，都是自己画的，不是任何真实 App 的图标，点了只会像 iOS 一样暗一下
+- 程序坞和「搜索」照真 iPhone 截图量的尺寸做（iOS 26/27 的液态玻璃）；程序坞里 4 个图标（电话、信息、相机、Gmail）是 Boxi 从 Figma 社区文件（iOS App icons vector）里挑的现成矢量图标，原样使用（`src/assets/dock/`），不是自己画的；程序坞玻璃几乎透明、边线很细：
+  点了只会像 iOS 一样暗一下
 - 三张壁纸（全用 CSS 画的，不是图片）：橄榄（默认）、夜幕（深蓝 + 下方一片暖橙色的光）、晨光（柔和的多色渐变），在「调参」里换
 - 想换叠放里放哪几张、什么顺序：改 `src/data.js` 的 `STACKS`
 
@@ -79,7 +79,7 @@ src/App.jsx                  整个主屏幕：一个中号叠放 + 两个小号
 src/data.js                  小组件的内容、每一叠里放哪几张、程序坞里放哪些图标（改内容、换顺序改这里）
 src/story.js                 「今天的故事」：会议、路线、下雨的时间，全部相对现在（useStory）
 src/components/PeelStack.jsx 一叠小组件：画卡片、小圆点、名字，把下面两个引擎装上去
-src/components/AppIcon.jsx   程序坞里的 App 图标（「透明」风格，自己画的图形，只是样子）
+src/components/AppIcon.jsx   程序坞里的 App 图标（用 src/assets/dock/ 里挑好的矢量图，只是样子）
 src/components/widgets/      每个小组件一个文件：Map、Weather、Calendar、Todo、Fitness、Battery（叠里在用），WorldClock、Podcasts、Notes（备用）
 src/hooks/useNow.js          「现在几点」，每秒更新（时钟、日历、天气用）
 src/engine/geometry.js       翻角的全部数学（纯函数，不碰页面）

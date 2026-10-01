@@ -24,7 +24,7 @@ import { Tuner } from './engine/tuner.js';
  */
 const DOCK_W = 367;
 const DOCK_H = 103;
-const DOCK_SHAPE = squirclePolygon(DOCK_W, DOCK_H, 46, 0.6, 24); // 24：角大，多取点才圆滑（默认 8 会看出棱角）
+const DOCK_SHAPE = squirclePolygon(DOCK_W, DOCK_H, 32, 0.6, 24); // 24：角大，多取点才圆滑（默认 8 会看出棱角）
 const DOCK_CLIP = `polygon(${DOCK_SHAPE.map((p) => `${((p.x / DOCK_W) * 100).toFixed(3)}% ${((p.y / DOCK_H) * 100).toFixed(3)}%`).join(',')})`;
 const DOCK_PATH = 'M' + DOCK_SHAPE.map((p) => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join('L') + 'Z';
 
@@ -127,18 +127,18 @@ export default function App() {
           搜索
         </div>
         <div className="dock" style={{ clipPath: DOCK_CLIP }}>
-          {/* 玻璃边缘的细亮线：上边最亮，下边一点点，两侧几乎没有（iOS 26/27 的 Liquid Glass）。
-              线宽 1.5，一半在形状外面被裁掉，看起来是一条贴边的细线 */}
+          {/* 玻璃边缘的细亮线（iOS 26/27 的 Liquid Glass）：整圈都有一道很淡的线，上边稍亮、下边次之。
+              线宽 1，一半在形状外面被裁掉，看起来是一条 0.5px 的贴边细线（比 Boxi 截图里的还要克制一点点） */}
           <svg className="dock__rim" viewBox={`0 0 ${DOCK_W} ${DOCK_H}`} preserveAspectRatio="none" aria-hidden="true">
             <defs>
               <linearGradient id={rimId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor="#fff" stopOpacity="0.55" />
-                <stop offset="0.3" stopColor="#fff" stopOpacity="0.14" />
-                <stop offset="0.7" stopColor="#fff" stopOpacity="0.06" />
-                <stop offset="1" stopColor="#fff" stopOpacity="0.2" />
+                <stop offset="0" stopColor="#fff" stopOpacity="0.34" />
+                <stop offset="0.3" stopColor="#fff" stopOpacity="0.2" />
+                <stop offset="0.7" stopColor="#fff" stopOpacity="0.16" />
+                <stop offset="1" stopColor="#fff" stopOpacity="0.24" />
               </linearGradient>
             </defs>
-            <path d={DOCK_PATH} fill="none" stroke={`url(#${rimId})`} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+            <path d={DOCK_PATH} fill="none" stroke={`url(#${rimId})`} strokeWidth="1" vectorEffect="non-scaling-stroke" />
           </svg>
           {DOCK_APPS.map((a) => (
             <AppIcon key={a.app} {...a} />
