@@ -758,11 +758,11 @@
   color: var(--cal-accent);
 }
 .cal__peek-count small { font-size: calc(var(--u) * 13); font-weight: 600; letter-spacing: 0; }
-/* 地图：大号的到达时间「09:34 到」，从「现在出发，09:34 到」那一行（面板顶 67、行高 15）出发，白色；
- * 「到」字小一号（和 22 分钟的「分钟」一样 15）。「路上 22 分钟」和「去公司」一样大，灰色，从大号的 22 那里出发 */
-.map__panel .map__peek-arrive {
+/* 地图：大号的「22 分钟到家」，从面板里大号的 22 分钟（面板顶 29、字高 34）那里出发，白色；
+ * 「分钟到家」小一号（和面板里「分钟」一样 15） */
+.map__panel .map__peek-eta {
   left: calc(var(--u) * 13);
-  top: calc(var(--u) * 74.5 - 0.5em);
+  top: calc(var(--u) * 32);
   font-size: calc(var(--u) * 28);
   line-height: 1;
   font-weight: 600;
@@ -770,15 +770,7 @@
   letter-spacing: -0.01em;
   color: #fff;
 }
-.map__peek-arrive small { font-size: calc(var(--u) * 15); font-weight: 600; letter-spacing: 0; }
-.map__panel .map__peek-trip {
-  left: calc(var(--u) * 13);
-  top: calc(var(--u) * 38);
-  font-size: calc(var(--u) * 13);
-  line-height: calc(var(--u) * 16);
-  font-weight: 600;
-  color: rgba(235, 235, 245, 0.68);
-}
+.map__peek-eta small { font-size: calc(var(--u) * 15); font-weight: 600; letter-spacing: 0; }
 /* 播客：标题的两行版（和原标题一样的字，只是窄一点、折成两行），和原标题左上角对齐；
  * 「还剩24分钟」和那行灰字一样大，贴着那行灰字的底 */
 .pod__text { position: relative; }

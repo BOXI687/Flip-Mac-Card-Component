@@ -37,7 +37,7 @@ const CASES = {
   'calendar-small': { stack: 1, id: 'stackSmallA', index: 1, label: '日历', roll: true, hero: 'count' },
   'battery-small': { stack: 2, id: 'stackSmallB', index: 0, label: '设备电量', roll: true, hero: 'pct' },
   'clock-medium': { stack: 0, id: 'stack', index: 1, label: '世界时钟', roll: true, hero: 'time' },
-  'map-medium': { stack: 0, id: 'stack', index: 2, label: '地图', roll: true, hero: 'arrive' },
+  'map-medium': { stack: 0, id: 'stack', index: 2, label: '地图', roll: true, hero: 'eta' },
   'todo-small': { stack: 1, id: 'stackSmallA', index: 0, label: '待办', hero: 't1' },
   'fitness-small': { stack: 2, id: 'stackSmallB', index: 1, label: '健身·活动', roll: true, hero: 'left' },
 };
@@ -174,7 +174,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
   // 慢慢掀（很多小步）、停三次、慢慢盖回、松手
   // 升起的是说明里 roll 写的那个元素（stopsAt：主角不是 roll 的元素时，要在它出场的那一段停，现在都不需要）
   const RISE_CASES = [
-    ['map-medium', /^\d\d:\d\d 到$/],
+    ['map-medium', /^\d+ 分钟到(家|公司)$/],
     ['weather-medium', /^\d\d:00 起有雨$/],
     ['clock-medium', /^\d\d:\d\d$/],
     ['calendar-small', /^\d+ 分钟后$/],
@@ -283,6 +283,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
         return { ok: true, text: d.rise.text, all: d.rise.glyphs.every((g) => g.p === 1), still, maxOff: +maxOff.toFixed(2), o: +d.o.toFixed(3), n: wins.length };
       }, cs.stack);
       if (['calendar-small', 'map-medium', 'clock-medium'].includes(name) && c === 'br') {
+        const minuteChanges = name !== 'map-medium'; // 地图说的是「22 分钟到家」，过一分钟还是 22，不会变
         // 1) 字在掀着的时候变了（像 React 那样直接改字）：还没画下一帧，数字层就已经是新的字，而且直接是到位的（不滚）
         const tick = await page.evaluate(async (i) => {
           const p = peels[i];
@@ -301,6 +302,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
           return r;
         }, cs.stack);
         check(`digit rise ${name}: text changes mid-peel → layer rebuilt with the new characters before the next frame, already risen`, tick.layer === tick.own && tick.risen && tick.back !== tick.layer, JSON.stringify(tick));
+        if (minuteChanges) {
         // 2) 真的过了一分钟（时钟往后拨）：React 自己改了倒计时 / 到达时间，数字层跟着是新的值（每一帧的检查也一直在跑）
         const before = await page.evaluate((i) => peels[i].reveal.debug().rise.text, cs.stack);
         await page.clock.setFixedTime(new Date(T0.getTime() + 60 * 1000));
@@ -316,6 +318,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
         await page.clock.setFixedTime(T0);
         await page.waitForFunction(({ i, before }) => peels[i].reveal.debug().rise.text === before, { i: cs.stack, before }, { timeout: 3000 }).catch(() => {});
         check(`digit rise ${name}: a real minute passes mid-peel → the risen number shows the new value`, after.own !== before && after.layer === after.own && after.risen && shape.test(after.own), JSON.stringify({ before, after }));
+        }
       }
       // 慢慢盖回去（很多小步），再松手
       while (k > 0.05) {
@@ -382,9 +385,9 @@ const leftovers = (page, i) => page.evaluate((i) => {
     await swipeStack(110);
     const c = await peekNow(400); // 回到地图在上 → 天气
     const lo = await leftovers(page, 0);
-    check('after swiping: each peel measures the new under card (天气 on top → 世界时钟 moves, hero time; 世界时钟 on top → 地图 moves, hero arrive; back to 地图 on top → 天气 moves, hero rain)',
+    check('after swiping: each peel measures the new under card (天气 on top → 世界时钟 moves, hero time; 世界时钟 on top → 地图 moves, hero eta; back to 地图 on top → 天气 moves, hero rain)',
       a.index === 1 && a.under === '世界时钟' && a.active && a.card && a.hero === 'time' &&
-      b.index === 2 && b.under === '地图' && b.active && b.card && b.hero === 'arrive' &&
+      b.index === 2 && b.under === '地图' && b.active && b.card && b.hero === 'eta' &&
       c.index === 0 && c.under === '天气' && c.active && c.card && c.hero === 'rain' && lo.bad.length === 0,
       JSON.stringify({ a, b, c, lo }));
   }
