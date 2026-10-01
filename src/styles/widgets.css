@@ -711,6 +711,17 @@
   letter-spacing: -0.01em;
   color: #fff;
 }
+/* 中号的「在睡觉 / 工作时间 / 休息中」：和「去公司」一样大的灰字，从第一个城市「时差」那一行（表盘 72 + 间隙 4 + 城市、今天各 12.5，再半行）出发 */
+.clocks--medium .clocks__status {
+  left: 0;
+  right: 0;
+  top: calc(var(--u) * 107.25 - 0.5em);
+  text-align: center;
+  font-size: calc(var(--u) * 13);
+  line-height: 1;
+  font-weight: 600;
+  color: rgba(235, 235, 245, 0.68);
+}
 /* 小号：表盘 140，数字时间大一点；城市名在它下面 */
 .clocks--small .clocks__digital { top: calc(var(--u) * 70 - 0.5em); font-size: calc(var(--u) * 30); }
 .clocks__peek-city {

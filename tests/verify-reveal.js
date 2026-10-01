@@ -4,20 +4,20 @@
  *   (cd dist && python3 -m http.server 8780) &
  *   PORT=8780 node tests/verify-reveal.js
  *
- * 三叠里的六张卡都有「掀开就聚拢」说明，每一张在「另一张」下面时（天气、设备电量、日历 × 四个角；
+ * 三叠里的七张卡都有「掀开就聚拢」说明，每一张在「下一张」下面时（天气、世界时钟、设备电量、日历 × 四个角；
  * 地图、待办、健身小号 × br、tl 两个角）：
  *   - 慢慢掀的时候，主角每一帧的位置是连续的（没有突然跳一下）
  *   - 停住以后，主角的中心在露出来的口子里、是正的（没有歪、没有镜像）、看得见
  *   - 掀到最大：数字逐位升起全部到位，显示的是真实数值（有升起数字的卡，br、tl）
  *   - 松手盖回：下面那张卡上所有改过的样式都清掉了（transform / opacity / 数字升起那一层）
- * 数字逐位升起（修「15:96」那种错数字）：地图的到达时间、天气的「几点起有雨」、日历的倒计时、健身的「还差 314 大卡」、
+ * 数字逐位升起（修「15:96」那种错数字）：地图的到达时间、天气的「几点起有雨」、世界时钟的纽约时间、日历的倒计时、健身的「还差 314 大卡」、
  *   设备电量的 % 各两个角，慢慢掀、中途停三次、慢慢盖回，
  *   每一帧都检查：数字层里每一位都是真实数值里那个位置上的字，没有多余的字；原来的字是透明的（不会叠两层）；
  *   停住时数字也停住；掀到最大时每一位都升到位，和原来的字重合（差不到 1px）；汉字（「到」「分钟后」）一直在原位。
- *   日历、地图（br）：掀着的时候真的过了一分钟（倒计时、到达时间变了），数字层马上是新的字。
- * 另外：面板里关掉「掀开时信息聚拢」时什么都不动；系统「减弱动态效果」时什么都不动；换了一张卡再掀，量的是新的那张；
+ *   日历、地图、世界时钟（br）：掀着的时候真的过了一分钟（倒计时、到达时间变了），数字层马上是新的字。
+ * 另外：面板里关掉「掀开时信息聚拢」时什么都不动；系统「减弱动态效果」时什么都不动；中号叠换了一张卡再掀（天气→时钟→地图→回到天气），量的是新的「下一张」；
  * 面板的开关、旧存档（A / B / 关）的换算；没有 console 报错。
- * （世界时钟、播客、备忘录、健身中号、电池中号现在不在任何一叠里，不测；它们的说明还在代码里。）
+ * （播客、备忘录、健身中号、电池中号现在不在任何一叠里，不测；它们的说明还在代码里。世界时钟小号也不在叠里，小号的说明不测。）
  */
 const { execSync } = require('child_process');
 const { chromium } = require(`${execSync('npm root -g').toString().trim()}/playwright`);
@@ -29,13 +29,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 哪一叠、最上面放第几张，下面（被偷看的 = 下一张，最后一张的下一张绕回第一张）才是想测的那种小组件。
 // 现在的叠法（src/data.js 的 STACKS）：每叠一对
-//   中号 [地图, 天气]；左边小号 [日历, 待办]；右边小号 [健身, 设备电量]
+//   中号 [地图, 天气, 世界时钟]（3 张：地图在上→偷看天气；天气在上→偷看时钟；时钟在上→绕回偷看地图）；
+//   左边小号 [日历, 待办]；右边小号 [健身, 设备电量]
 // roll = 这种小组件有「数字逐位升起」；hero = 主角的名字（说明改了会报出来）
 const CASES = {
   'weather-medium': { stack: 0, id: 'stack', index: 0, label: '天气', roll: true, hero: 'rain' },
   'calendar-small': { stack: 1, id: 'stackSmallA', index: 1, label: '日历', roll: true, hero: 'count' },
   'battery-small': { stack: 2, id: 'stackSmallB', index: 0, label: '设备电量', roll: true, hero: 'pct' },
-  'map-medium': { stack: 0, id: 'stack', index: 1, label: '地图', roll: true, hero: 'arrive' },
+  'clock-medium': { stack: 0, id: 'stack', index: 1, label: '世界时钟', roll: true, hero: 'time' },
+  'map-medium': { stack: 0, id: 'stack', index: 2, label: '地图', roll: true, hero: 'arrive' },
   'todo-small': { stack: 1, id: 'stackSmallA', index: 0, label: '待办', hero: 't1' },
   'fitness-small': { stack: 2, id: 'stackSmallB', index: 1, label: '健身·活动', roll: true, hero: 'left' },
 };
@@ -126,7 +128,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
   const browser = await chromium.launch();
   const { ctx, page, errs, t } = await setup(browser);
 
-  // ================= 六张卡：前三种 × 四个角，后三种（第二阶段新加的）× br、tl =================
+  // ================= 七张卡：天气、世界时钟、设备电量、日历 × 四个角，地图、待办、健身小号 × br、tl =================
   for (const name of Object.keys(CASES)) {
     const cs = CASES[name];
     for (const c of ['map-medium', 'todo-small', 'fitness-small'].includes(name) ? ['tl', 'br'] : ['tl', 'tr', 'br', 'bl']) {
@@ -174,6 +176,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
   const RISE_CASES = [
     ['map-medium', /^\d\d:\d\d 到$/],
     ['weather-medium', /^\d\d:00 起有雨$/],
+    ['clock-medium', /^\d\d:\d\d$/],
     ['calendar-small', /^\d+ 分钟后$/],
     ['fitness-small', /^还差 \d+ 大卡$/],
     ['battery-small', /^\d+%$/],
@@ -279,7 +282,7 @@ const leftovers = (page, i) => page.evaluate((i) => {
         const still = wins.every((w) => !w.firstChild.style.transform && !w.firstChild.style.opacity && getComputedStyle(w.firstChild).opacity === '1');
         return { ok: true, text: d.rise.text, all: d.rise.glyphs.every((g) => g.p === 1), still, maxOff: +maxOff.toFixed(2), o: +d.o.toFixed(3), n: wins.length };
       }, cs.stack);
-      if ((name === 'calendar-small' || name === 'map-medium') && c === 'br') {
+      if (['calendar-small', 'map-medium', 'clock-medium'].includes(name) && c === 'br') {
         // 1) 字在掀着的时候变了（像 React 那样直接改字）：还没画下一帧，数字层就已经是新的字，而且直接是到位的（不滚）
         const tick = await page.evaluate(async (i) => {
           const p = peels[i];
@@ -350,33 +353,56 @@ const leftovers = (page, i) => page.evaluate((i) => {
   }
 
   // ================= 滑到别的卡以后再掀：量的是新的「下一张」 =================
+  // 中号现在 3 张：地图（下面是天气）→ 往上滑 → 天气（下面是世界时钟）→ 往上滑 → 世界时钟（下面绕回地图）→ 往下滑两次回到地图
   {
     const cs = CASES['weather-medium'];
     await prepare(page, cs); // 中号最上面是地图，下面是天气
     const B = await page.evaluate(() => { const r = document.getElementById('stack').getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; });
-    // 手指往上滑一张：最上面换成天气，下面绕回地图（量的要是地图，不能还在量天气）
     const m = { x: B.l + B.w / 2, y: B.t + B.h / 2 };
-    await t('touchStart', m.x, m.y);
-    for (let k = 1; k <= 12; k++) { await t('touchMove', m.x, m.y - 110 * k / 12); await sleep(16); }
-    await t('touchEnd'); await sleep(1000);
     const from = corners(B).br;
-    await t('touchStart', from.x, from.y);
-    for (let k = 1; k <= 20; k++) { await t('touchMove', from.x - B.w * 0.5 * k / 20, from.y - B.h * 0.4 * k / 20); await sleep(16); }
-    await sleep(300);
-    const a = await page.evaluate(() => ({ index: peel.index, under: peel.under.getAttribute('aria-label'), active: peel.reveal.active, card: peel.reveal.card === peel.under, hero: peel.reveal.debug().heroKey }));
-    await t('touchEnd'); await sleep(1300);
-    // 往下滑回去一张：最上面又是地图，下面是天气（量的是天气）
-    await t('touchStart', m.x, m.y);
-    for (let k = 1; k <= 12; k++) { await t('touchMove', m.x, m.y + 110 * k / 12); await sleep(16); }
-    await t('touchEnd'); await sleep(1000);
-    await t('touchStart', from.x, from.y);
-    for (let k = 1; k <= 20; k++) { await t('touchMove', from.x - B.w * 0.5 * k / 20, from.y - B.h * 0.4 * k / 20); await sleep(16); }
-    await sleep(400);
-    const b = await page.evaluate(() => ({ index: peel.index, under: peel.under.getAttribute('aria-label'), active: peel.reveal.active, card: peel.reveal.card === peel.under, hero: peel.reveal.debug().heroKey }));
-    await t('touchEnd'); await sleep(1300);
+    const swipeStack = async (dy) => {
+      await t('touchStart', m.x, m.y);
+      for (let k = 1; k <= 12; k++) { await t('touchMove', m.x, m.y + dy * k / 12); await sleep(16); }
+      await t('touchEnd'); await sleep(1000);
+    };
+    // 掀一下 br 角，量一下下面那张卡是谁、引擎量的是不是它
+    const peekNow = async (wait) => {
+      await t('touchStart', from.x, from.y);
+      for (let k = 1; k <= 20; k++) { await t('touchMove', from.x - B.w * 0.5 * k / 20, from.y - B.h * 0.4 * k / 20); await sleep(16); }
+      await sleep(wait);
+      const r = await page.evaluate(() => ({ index: peel.index, under: peel.under.getAttribute('aria-label'), active: peel.reveal.active, card: peel.reveal.card === peel.under, hero: peel.reveal.debug().heroKey }));
+      await t('touchEnd'); await sleep(1300);
+      return r;
+    };
+    await swipeStack(-110);
+    const a = await peekNow(300); // 天气在上 → 时钟
+    await swipeStack(-110);
+    const b = await peekNow(300); // 时钟在上 → 绕回地图
+    await swipeStack(110);
+    await swipeStack(110);
+    const c = await peekNow(400); // 回到地图在上 → 天气
     const lo = await leftovers(page, 0);
-    check('after swiping: each peel measures the new under card (天气 on top → 地图 moves, hero arrive; back to 地图 on top → 天气 moves, hero rain)', a.index === 1 && a.under === '地图' && a.active && a.card && a.hero === 'arrive' && b.index === 0 && b.under === '天气' && b.active && b.card && b.hero === 'rain' && lo.bad.length === 0,
-      JSON.stringify({ a, b, lo }));
+    check('after swiping: each peel measures the new under card (天气 on top → 世界时钟 moves, hero time; 世界时钟 on top → 地图 moves, hero arrive; back to 地图 on top → 天气 moves, hero rain)',
+      a.index === 1 && a.under === '世界时钟' && a.active && a.card && a.hero === 'time' &&
+      b.index === 2 && b.under === '地图' && b.active && b.card && b.hero === 'arrive' &&
+      c.index === 0 && c.under === '天气' && c.active && c.card && c.hero === 'rain' && lo.bad.length === 0,
+      JSON.stringify({ a, b, c, lo }));
+  }
+
+  // ================= 世界时钟的状态词：按纽约（第一个城市）那边的钟点 =================
+  // 九月纽约比上海晚 12 小时：上海 15:02 = 纽约 03:02。9–18 点 工作时间，23–7 点 在睡觉，其余 休息中（边界：7:00 休息中、6:59 在睡觉、9:00 工作时间、17:59 工作时间、18:00 休息中、22:59 休息中、23:00 在睡觉）
+  {
+    const rows = [['2026-09-28T15:02:10+08:00', '03:02', '在睡觉'], ['2026-09-28T21:00:10+08:00', '09:00', '工作时间'], ['2026-09-28T05:59:10+08:00', '17:59', '工作时间'],
+      ['2026-09-28T06:00:10+08:00', '18:00', '休息中'], ['2026-09-28T10:59:10+08:00', '22:59', '休息中'], ['2026-09-28T11:00:10+08:00', '23:00', '在睡觉'],
+      ['2026-09-28T19:00:10+08:00', '07:00', '休息中'], ['2026-09-28T18:59:10+08:00', '06:59', '在睡觉']];
+    const got = [];
+    for (const [iso, time, word] of rows) {
+      await page.clock.setFixedTime(new Date(iso));
+      await page.waitForFunction((time) => { const el = peels[0].cards.map((c) => c.querySelector('.clocks__digital')).find(Boolean); return el && el.textContent === time; }, time, { timeout: 4000 }).catch(() => {});
+      got.push(await page.evaluate(() => { const c = peels[0].cards.find((k) => k.getAttribute('aria-label') === '世界时钟'); return [c.querySelector('.clocks__digital').textContent, c.querySelector('.clocks__status').textContent, c.querySelector('.clocks__status').getAttribute('aria-hidden')]; }));
+    }
+    await page.clock.setFixedTime(T0);
+    check('world clock: status word follows the hero city\'s local hour (在睡觉 / 工作时间 / 休息中, at the boundaries); peek-only text is aria-hidden', rows.every((r, i) => got[i][0] === r[1] && got[i][1] === r[2] && got[i][2] === 'true'), JSON.stringify(got));
   }
 
   // ================= 调参面板：聚拢开关、数字升起开关、旧存档的换算 =================

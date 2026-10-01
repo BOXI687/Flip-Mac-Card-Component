@@ -90,6 +90,13 @@ function ClockFace({ p, label, peek }) {
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
+/** 那边现在方不方便联系（偷看时的第三级）：9–18 点上班，23–7 点睡觉，其余是休息 */
+function statusWord(hour) {
+  if (hour >= 9 && hour < 18) return '工作时间';
+  if (hour >= 23 || hour < 7) return '在睡觉';
+  return '休息中';
+}
+
 /** size：'medium'（默认，最多 4 个城市）或 'small'（只用第一个城市） */
 export default function WorldClock({ size = 'medium', cities }) {
   const now = useNow();
@@ -121,6 +128,9 @@ export default function WorldClock({ size = 'medium', cities }) {
                 {pad2(p.hour)}:{pad2(p.minute)}
               </div>
             )}
+            {hero && !small && (
+              <div className="clocks__status" data-peek="status" data-peek-only aria-hidden="true">{statusWord(p.hour)}</div>
+            )}
             {hero && small && (
               <div className="clocks__peek-city" data-peek="city" data-peek-only aria-hidden="true">{c.name}</div>
             )}
@@ -132,16 +142,26 @@ export default function WorldClock({ size = 'medium', cities }) {
 }
 
 /*
- * 掀开就聚拢（见 engine/reveal.js、CLAUDE.md）：第一个城市的时间挤进口子里。
- *   口子小 → 只有数字时间 → 时间 + 城市 → 小表盘 + 时间 + 城市 + 时差；「今天」和别的城市留在原位、变淡
+ * 掀开就聚拢（见 engine/reveal.js、CLAUDE.md）：中号叠里时钟在天气下面，掀天气看到的是时钟。
+ * 状态栏已经有本地时间了，所以时钟不先说「几点」（本地），说的是第一个城市（纽约，不是本地时区）的信息：
+ *   口子小 → 大号数字时间「03:02」（逐位升起，冒号一起）
+ *         → 数字变大（1.2 倍）+ 下面一行「纽约 昨天 -12小时」
+ *         → 数字再大（1.7 倍）+ 那一行 + 「在睡觉」（按那边的钟点：9–18 工作时间，23–7 在睡觉，其余休息中）
+ *   中号的口子是横着长的，宽的东西「贵」、往下加一行很「便宜」：所以不放表盘（表盘留在原位变淡），
+ *   后两级让数字跟着变大，三级的宽度拉开，不会挤在一起换。别的三个城市整个标成 "rest"，只负责变淡。
+ *   keepGathered：从左边的角掀时，原来的城市 / 今天 / 时差先露出来了，但别的小组件这时会「回到原样」，时钟的原样里没有数字时间，所以不回。
+ *   小号（现在没放进任何一叠）的说明没改。
  */
+const INFO = { row: ['city', 'day', 'off'], gap: 0.8 }; // 「纽约 昨天 -12小时」一行
 WorldClock.peek = {
   medium: {
+    hero: 'time',
     roll: 'time',
+    keepGathered: true, // 家里的城市 / 今天 / 时差露出来时也不回到原样：家里没有数字时间，回去就看不到主角了
     layouts: [
       'time',
-      { either: [{ col: ['time', 'city'] }, { row: ['time', 'city'] }] },
-      { either: [{ row: [{ key: 'dial', scale: 0.8 }, { col: ['time', 'city', 'off'] }] }, { col: [{ key: 'dial', scale: 0.6 }, 'time', 'city'] }] },
+      { col: [{ key: 'time', scale: 1.2 }, INFO], gap: 0.3 },
+      { col: [{ key: 'time', scale: 1.7 }, INFO, 'status'], gap: 0.3 },
     ],
   },
   small: {

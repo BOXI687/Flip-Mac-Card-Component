@@ -411,7 +411,7 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
       clip: p.el.style.clipPath.slice(0, 12),
     };
   }, i);
-  const APP = { 地图: '地图', 天气: '天气', 日历: '日历', 待办: '待办', '健身·活动': '健身', 设备电量: '电池' };
+  const APP = { 地图: '地图', 天气: '天气', 世界时钟: '时钟', 日历: '日历', 待办: '待办', '健身·活动': '健身', 设备电量: '电池' };
   const others = (i) => page.evaluate((i) => peels.filter((_, k) => k !== i).map((p) => `${p.index}${p.swiper.state}${p.state}`).join(','), i);
   // 从卡片中间竖着拖 dy（负数 = 往上）
   const swipe = async (id, dy, steps = 12, delay = 16, release = true) => {
@@ -433,9 +433,17 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
     }
     check(`swipe ${id}: other stacks unaffected`, (await others(i)) === othersBefore, `${othersBefore} -> ${await others(i)}`);
   }
-  // 三叠，每叠一对：中号 地图 天气；左小号 日历 待办；右小号 健身 设备电量
+  // 三叠：中号 3 张（地图 天气 世界时钟）；左小号 日历 待办；右小号 健身 设备电量
   const order = await page.evaluate(() => peels.map((p) => p.cards.map((c) => c.getAttribute('aria-label')).join(' ')));
-  check('stack contents: three pairs — medium 2 (地图 天气), small A 2 (日历 待办), small B 2 (健身 设备电量)', order.join(' | ') === '地图 天气 | 日历 待办 | 健身·活动 设备电量', order.join(' | '));
+  check('stack contents: medium 3 (地图 天气 世界时钟), small A 2 (日历 待办), small B 2 (健身 设备电量)', order.join(' | ') === '地图 天气 世界时钟 | 日历 待办 | 健身·活动 设备电量', order.join(' | '));
+  // 世界时钟的第一个城市（偷看时的主角）不能是本地时区：状态栏已经有本地时间；表盘有 4 个，也不能有和本地同一时区的
+  const clk = await page.evaluate(() => {
+    const card = peels[0].cards.find((c) => c.getAttribute('aria-label') === '世界时钟');
+    const items = [...card.querySelectorAll('.clocks__item')];
+    const local = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return { n: items.length, tz: items.map((i) => i.dataset.tz), local, first: items[0].querySelector('.clocks__city').textContent, offs: items.map((i) => i.querySelectorAll('.clocks__sub')[1].textContent) };
+  });
+  check('world clock (3rd medium card): 4 cities, none in the local zone (hero city has a real time difference)', clk.n === 4 && !clk.tz.includes(clk.local) && clk.offs.every((o) => !/^[+-]0小时$/.test(o)) && clk.first === '纽约', JSON.stringify(clk));
 
   // 滑到一半的截图（中号往上拖一半，不松手）
   await swipe('stack', -70, 10, 16, false);
@@ -465,7 +473,7 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
     check('horizontal drag in the middle does not switch', s.index === 0 && s.sw === 'idle' && s.transforms === '', JSON.stringify(s));
   }
   // 滑到别的卡以后，掀角偷看的是「顺序里的下一张」；四个角都试，每一叠都试
-  // 每叠都只有 2 张：滑到第 2 张（index 1，下一张绕回第 1 张）
+  // 滑到最多第 3 张（中号 index 2，下一张绕回第 1 张；小号 index 1）
   for (let i = 0; i < 3; i++) {
     const id = stackIds[i];
     const k = Math.min(2, (await stackInfo(i)).n - 1);

@@ -31,11 +31,13 @@ export const DEVICES_WORN = [
   { icon: 'case', level: 100, charging: true },
 ];
 
+// 世界时钟的 4 个城市（编的）。第一个城市是偷看时的主角，而本站默认「你」在上海（天气的城市），
+// 状态栏已经显示本地时间了，所以第一个城市不能是本地时区：纽约（和上海差 12~13 小时）。别的城市也都不放北京 / 上海
 export const CITIES = [
-  { name: '北京', tz: 'Asia/Shanghai' },
-  { name: '马德里', tz: 'Europe/Madrid' },
-  { name: '东京', tz: 'Asia/Tokyo' },
+  { name: '纽约', tz: 'America/New_York' },
   { name: '伦敦', tz: 'Europe/London' },
+  { name: '东京', tz: 'Asia/Tokyo' },
+  { name: '旧金山', tz: 'America/Los_Angeles' },
 ];
 
 // 天气：一天里的最高 / 最低温、日出日落时间、哪几个钟点有云（都是编的）
@@ -80,21 +82,22 @@ const W = {
   devices: { kind: 'battery', label: '设备电量', app: '电池', Widget: Battery, props: { devices: DEVICES_WORN } },
 };
 
-// 小号时钟只显示一个城市（现在没有叠放它，留着备用：clockSmall(CITIES[3]) 就是伦敦）
+// 小号时钟只显示一个城市（现在没有叠放它，留着备用：clockSmall(CITIES[1]) 就是伦敦）
 export const clockSmall = (city) => ({ ...W.clock, props: { cities: [city] } });
 
 /**
  * 三叠小组件，数组里第一个在最上面；往上滑依次看到后面的，最后一张再往上滑回到第一张。
  * 每一叠都是刻意配好的「一对」：掀开角偷看到的永远是「另一张」，两张互相有关系：
- *   中号 出门：地图（去公司 22 分钟）↔ 天气（几点起有雨，出门要不要带伞）
+ *   中号 出门（3 张）：地图（去公司 22 分钟）→ 天气（几点起有雨，出门要不要带伞）→ 世界时钟（纽约现在几点、方不方便联系）
+ *     偷看永远是「顺序里的下一张」：地图上 → 看到天气；天气上 → 看到时钟；时钟上 → 绕回看到地图
  *   左小号 今天：日历（设计站会几点）↔ 待办（会前要做完什么）
  *   右小号 随身：健身（今天动了多少）↔ 设备电量（戴在身上的设备还剩多少电）
- * 没放进任何一叠、但代码留着的：播客、世界时钟、备忘录（中号）、W.fitness 的中号版、W.battery（中号，四个设备）。
+ * 没放进任何一叠、但代码留着的：播客、备忘录（中号）、W.fitness 的中号版、W.battery（中号，四个设备）。
  * 想放回去：在这里加上 W.xxx 就行。
- * 掀开时「信息聚拢」：六张卡都有说明（在每个小组件文件的最后），偷看到的是「上面那张卡和状态栏都没有的、最有用的一件事」，口子越大信息越多。
+ * 掀开时「信息聚拢」：七张卡都有说明（在每个小组件文件的最后），偷看到的是「上面那张卡和状态栏都没有的、最有用的一件事」，口子越大信息越多。
  */
 export const STACKS = {
-  medium: [W.map, W.weather],
+  medium: [W.map, W.weather, W.clock],
   smallA: [W.calendar, W.todo],
   smallB: [W.fitness, W.devices],
 };

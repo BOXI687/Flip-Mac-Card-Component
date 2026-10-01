@@ -118,7 +118,8 @@ export class Reveal {
     this.heroKey = spec.hero || order[0] || this.items[0].key;
     // 最后一张座位表里的元素 = 「主要信息」：它们的原位都露出来时，就回到卡片本来的样子
     const main = keysOf((spec.layouts || [])[(spec.layouts || []).length - 1]);
-    this.mainItems = main.map((k) => this.byKey[k]).filter((it) => it && it.homeA === 1);
+    // spec.keepGathered：家里那几个元素没有主角的信息（世界时钟：家里没有数字时间），露出来了也不回原样
+    this.mainItems = spec.keepGathered ? [] : main.map((k) => this.byKey[k]).filter((it) => it && it.homeA === 1);
 
     // ---- 出发间隔：按上场顺序；不上场的元素（只负责变淡）不等 ----
     // 主角永远第一个出发
