@@ -10,7 +10,12 @@
   <!-- 「添加到主屏幕」后像 App 一样全屏打开 -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- default（不透明）：iOS 自己画状态栏那一条，网页从状态栏下面开始、一直铺到屏幕最底下。
+       不用 black-translucent（网页铺到状态栏下面）是因为 iOS 26 的两个毛病：
+       ① 网页高度少一个状态栏那么高，屏幕最底下空出一条画不进去的带子，程序坞跟着飘高（WebKit bug 301108）；
+       ② 状态栏下面露出的不是纯色时，iOS 会盖一层渐变模糊（Liquid Glass 的 scroll edge effect），把中号小组件的上边糊掉。
+       状态栏那一条的颜色 = theme-color，跟着壁纸换（tuner.js），壁纸最上面慢慢过渡到同一个颜色（style.css），接缝看不出来 -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Peel">
   <meta name="theme-color" content="#8d8b6b">
   <!-- 这两个文件在 public/ 里，打包时原样复制 -->
@@ -18,6 +23,12 @@
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 
   <title>Peel Widget Stack</title>
+  <!-- 从主屏幕打开（全屏 App）时给 <html> 加 standalone：状态栏在网页外面，排版要按这个来（style.css） -->
+  <script>
+    if (navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches)) {
+      document.documentElement.classList.add('standalone');
+    }
+  </script>
 </head>
 <body>
   <!-- 整个页面由 React 画在这里（src/main.jsx → src/App.jsx） -->

@@ -560,6 +560,36 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
     await s3.ctx.close();
   }
 
+  // ---- 从主屏幕打开（standalone）：状态栏是 iOS 画的不透明一条，网页从它下面开始（402×874 的 iPhone：网页 402×812）----
+  {
+    const s4 = await setup(browser, () => { Object.defineProperty(navigator, 'standalone', { get: () => true }); }, { viewport: { width: 402, height: 812 } });
+    await s4.page.goto(URL);
+    await s4.page.waitForFunction(() => window.peels && document.querySelector('.dock'), null, { timeout: 5000 }).catch(() => {});
+    const st = await s4.page.evaluate(() => {
+      const m = document.getElementById('stack').getBoundingClientRect(), d = document.querySelector('.dock').getBoundingClientRect();
+      const meta = () => document.querySelector('meta[name="theme-color"]').content;
+      const olive = meta();
+      tuner.open();
+      return { cls: document.documentElement.classList.contains('standalone'), top: m.top, dockGap: (innerHeight - d.bottom) / (m.width / 349.67),
+        bar: document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content, olive,
+        fade: getComputedStyle(document.body, '::before').backgroundImage.startsWith('linear-gradient(rgb(141, 139, 107)') };
+    });
+    // 换壁纸：状态栏颜色跟着换（点调参面板里的壁纸）
+    await sleep(700); // 面板滑上来
+    const colours = [];
+    for (const name of ['夜幕', '晨光', '橄榄']) {
+      await s4.page.evaluate((n) => document.querySelector(`.tn-swatch--wp[aria-label="${n}"]`).scrollIntoView({ block: 'center' }), name);
+      const p = await s4.page.evaluate((n) => { const r = document.querySelector(`.tn-swatch--wp[aria-label="${n}"]`).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 20 }; }, name);
+      await s4.tap(p.x, p.y); await sleep(100);
+      colours.push(await s4.page.evaluate(() => document.documentElement.dataset.wallpaper + ' ' + document.querySelector('meta[name="theme-color"]').content));
+    }
+    check('standalone (home-screen app): opaque status bar, medium 9 pt below the web view top, dock 17 pt from the bottom, wallpaper fades into the status-bar colour',
+      st.cls && st.bar === 'default' && Math.abs(st.top - 9) < 0.6 && Math.abs(st.dockGap - 17) < 0.6 && st.olive === '#8d8b6b' && st.fade && s4.errs.length === 0, JSON.stringify(st));
+    check('standalone: the status-bar colour (theme-color) follows the wallpaper', colours.join() === 'dusk #13263a,dawn #b9708a,olive #8d8b6b', colours.join());
+    await s4.page.screenshot({ path: OUT + 'standalone-402x812.png' });
+    await s4.ctx.close();
+  }
+
   await browser.close();
   console.log(results.join('\n'));
   console.log(`\n${results.filter((r) => r.startsWith('PASS')).length}/${results.length} passed`);

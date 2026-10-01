@@ -519,6 +519,10 @@ function attach(peel, others = [], dom = {}) {
     group.forEach((s) => s.setParams(patch));
     // 壁纸不是翻角的参数，但和别的参数一起存、一起复制；这里把它交给 CSS（<html data-wallpaper>）
     root.dataset.wallpaper = peel.params.wallpaper;
+    // 主屏幕 App 里状态栏那一条的颜色（theme-color）跟着壁纸换：颜色写在 style.css 每张壁纸的 --statusbar
+    const bar = getComputedStyle(root).getPropertyValue('--statusbar').trim();
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta && bar) meta.setAttribute('content', bar);
   };
   setAll(loadSaved(defaults)); // 先把上次调的值装上，再做首次提示
 
