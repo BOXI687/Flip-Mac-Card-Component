@@ -32,9 +32,6 @@
 </head>
 <body>
   <!-- 整个页面由 React 画在这里（src/main.jsx → src/App.jsx） -->
-  <!-- 从主屏幕打开时贴在网页最上面的一条纯色（style.css .edge-tint）：iOS 26 看到顶边有一块不透明的固定色块，
-       就用这个颜色，不再在状态栏下面盖一层模糊 -->
-  <div class="edge-tint" aria-hidden="true"></div>
   <div id="root"></div>
   <!-- type="module"：用 import / export 的新写法，所以不能再双击打开，要用 npm run dev 或打包后的网址 -->
   <script type="module" src="/src/main.jsx"></script>
