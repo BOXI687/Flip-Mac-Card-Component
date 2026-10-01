@@ -584,7 +584,7 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
       await s4.tap(p.x, p.y); await sleep(100);
       colours.push(await s4.page.evaluate(() => document.documentElement.dataset.wallpaper + ' ' + document.querySelector('meta[name="theme-color"]').content));
     }
-    check('standalone (home-screen app): opaque status bar, solid 12 px edge bar on top at the web view's top edge, medium 14 pt below it, dock 17 pt from the bottom, wallpaper fades into the status-bar colour',
+    check('standalone (home-screen app): opaque status bar, solid 12 px edge bar on top at the top edge of the web view, medium 14 pt below it, dock 17 pt from the bottom, wallpaper fades into the status-bar colour',
       st.cls && st.bar === 'default' && Math.abs(st.top - 14) < 0.6 && st.edge && Math.abs(st.dockGap - 17) < 0.6 && st.olive === '#8d8b6b' && st.fade && s4.errs.length === 0, JSON.stringify(st));
     check('standalone: the status-bar colour (theme-color) follows the wallpaper', colours.join() === 'dusk #13263a,dawn #b9708a,olive #8d8b6b', colours.join());
     await s4.page.screenshot({ path: OUT + 'standalone-402x812.png' });
