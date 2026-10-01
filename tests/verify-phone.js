@@ -542,6 +542,24 @@ const sheetOpen = (page) => page.evaluate(() => document.querySelector('.tn-shee
   check('localStorage throwing: page + panel still work', ok2[0] === 'returning' && ok2[1] && changed < 0.5 && s2.errs.length === 0, `damping ${changed}; errs ${s2.errs.join('|')}`);
   await s2.ctx.close();
 
+  // ---- 别的 iPhone 宽度：小组件跟着苹果的尺寸走（402 = iOS 27 UI Kit，430 = HIG 尺寸表），程序坞跟着 --u；不滚动 ----
+  for (const [w, h, mw, sw] of [[402, 874, 349.67, 164.67], [430, 932, 364, 170]]) {
+    const s3 = await setup(browser, null, { viewport: { width: w, height: h } });
+    await s3.page.goto(URL);
+    await s3.page.waitForFunction(() => window.peels && document.querySelector('.dock'), null, { timeout: 5000 }).catch(() => {});
+    const g = await s3.page.evaluate(() => {
+      const r = (s) => document.querySelector(s).getBoundingClientRect();
+      const m = r('#stack'), a = r('#stackSmallA'), b = r('#stackSmallB'), d = r('.dock');
+      return { m: [m.left, m.right, m.width, m.height], a: [a.left, a.width, a.height], b: [b.right, b.width], gap: b.left - a.right, dock: d.width, u: m.width / 349.67,
+        bottom: document.documentElement.scrollHeight - innerHeight, side: document.documentElement.scrollWidth - innerWidth };
+    });
+    const nr = (x, y) => Math.abs(x - y) < 0.6;
+    check(`${w}×${h}: medium ${mw}, smalls ${sw}, rows aligned, dock 367 pt, no scrolling`,
+      nr(g.m[2], mw) && nr(g.a[1], sw) && nr(g.a[2], sw) && nr(g.b[1], sw) && nr(g.m[3], sw) && nr(g.a[0], g.m[0]) && nr(g.b[0], g.m[1]) && nr(g.gap, mw - 2 * sw)
+      && Math.abs(g.dock / g.u - 367) < 0.6 && g.bottom === 0 && g.side === 0 && s3.errs.length === 0, JSON.stringify(g));
+    await s3.ctx.close();
+  }
+
   await browser.close();
   console.log(results.join('\n'));
   console.log(`\n${results.filter((r) => r.startsWith('PASS')).length}/${results.length} passed`);

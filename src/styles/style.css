@@ -11,15 +11,19 @@
  *     https://support.apple.com/guide/iphone/add-edit-and-remove-widgets-iphb8f1bf206/ios
  */
 :root {
-  /* 中号小组件的宽度：393pt 宽的 iPhone 上正好 338（左右各留 27.5，和 HIG 一致）。
-     屏幕更窄时等比缩小 */
+  /* 小组件尺寸跟着屏幕宽度走，三个点都是苹果给的（OFFICIAL）：
+       393pt 宽：中号 338、小号 158（HIG 尺寸表）
+       402pt 宽：中号 349.67、小号 164.67（iOS 27 UI Kit，Boxi 的手机就是这个宽度）
+       430pt 宽：中号 364、小号 170（HIG 尺寸表），再宽也不变
+     两点之间按直线过渡（INFERRED：没有官方数字的宽度，比如 414、440）；比 393 窄的屏幕等比缩小。
+     电脑上（≥ 900px）固定用 402pt 那一档：和 Boxi 手机上看到的一样大 */
   --widget-w: min(338px, calc(100vw - 55px));
+  --small-w: calc(var(--widget-w) * 158 / 338);
   /* --u = 设计稿里的「1pt」。设计稿画在 402pt 宽的 iPhone 上（中号宽 349.67），
      iOS 在小一点的屏幕上会把内容整体缩小（HIG 原话），所以按宽度比例换算 */
   --u: calc(var(--widget-w) / 349.67);
-  --widget-h: calc(var(--widget-w) * 158 / 338); /* 中号的高 = 小号的边长（HIG 尺寸表） */
-  --small-w: var(--widget-h);
-  --grid-gap: calc(var(--widget-w) * 22 / 338); /* 两个小号之间的缝：338 = 158 + 22 + 158 */
+  --widget-h: var(--small-w); /* 中号的高 = 小号的边长（HIG 尺寸表；设计稿 164.33 / 164.67，差 0.3 忽略） */
+  --grid-gap: calc(var(--widget-w) - 2 * var(--small-w)); /* 两个小号之间的缝：393 上 22、402 上 20.33、430 上 24 */
   --radius: calc(var(--u) * 28); /* 圆角 28（设计稿）。形状是连续圆角，由 peel.js 按这个半径算出来 */
   --row-gap: calc(var(--u) * 37); /* 上一排小组件底边到下一排顶边（MEASURED：Apple 主屏幕图） */
   --name-gap: calc(var(--u) * 6); /* 小组件底边到名字（设计稿：名字在底边下 6pt） */
@@ -47,6 +51,16 @@
   --tn-side-gap: 12px;
   /* 开/关面板的动画曲线（底部面板和侧边栏共用，内容区让位时也用它，两边同步） */
   --tn-ease: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (min-width: 394px) {
+  :root {
+    --widget-w: min(364px, calc(338px + (100vw - 393px) * 11.67 / 9), calc(349.67px + (100vw - 402px) * 14.33 / 28));
+    --small-w: min(170px, calc(158px + (100vw - 393px) * 6.67 / 9), calc(164.67px + (100vw - 402px) * 5.33 / 28));
+  }
+}
+@media (min-width: 900px) {
+  :root { --widget-w: 349.67px; --small-w: 164.67px; }
 }
 
 * { box-sizing: border-box; }
