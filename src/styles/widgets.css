@@ -454,8 +454,10 @@
   color: rgba(235, 235, 245, 0.68);
   font-variant-numeric: tabular-nums;
 }
-.map__note {
-  margin-top: calc(var(--u) * 2) !important;
+/* 只在偷看时出现（data-peek-only，见 Map.jsx）：放在「现在出发」那一行的位置（面板顶 11 + 16 + 2 + 34 + 4 = 67） */
+.map__panel .map__note {
+  left: calc(var(--u) * 13);
+  top: calc(var(--u) * 67);
   font-size: calc(var(--u) * 11.5);
   line-height: calc(var(--u) * 14);
   font-weight: 600;

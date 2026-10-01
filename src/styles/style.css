@@ -170,7 +170,23 @@ body::before {
  * 状态栏那一条正好是安全区那么高是 INFERRED，要在 iPhone 上看）。
  * 壁纸最上面 120px 从状态栏的颜色慢慢过渡到壁纸，两块接在一起看不出缝。
  */
-html.standalone { --home-top: calc(env(safe-area-inset-top) + 9px); }
+html.standalone { --home-top: calc(env(safe-area-inset-top) + 14px); background: var(--statusbar); }
+/* iOS 26 在状态栏下面还会盖一层渐变模糊（Liquid Glass 的 scroll edge effect，约 38pt 深，状态栏改成不透明也一样，
+ * Boxi 的 iPhone 17 截图证实了）。没有开关能关；WebKit 只在「网页顶边有一个 fixed 的、不透明背景的块，高 > 10px、
+ * 宽 ≥ 90%」时不画模糊，改用这个块的颜色（别人项目里查到的做法，INFERRED，要在 iPhone 上看）。
+ * 所以贴一条 12px 高、和状态栏同色的纯色条，放在最上层（顶边那一点最上面的东西得是它），小组件往下挪到离顶 14
+ * （真主屏幕是 9，多挪 5pt 让开这条，Boxi 同意「整体往下挪一点」） */
+.edge-tint { display: none; }
+html.standalone .edge-tint {
+  display: block;
+  position: fixed;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 12px;
+  background: var(--statusbar);
+}
 html.standalone body::before {
   background-image: linear-gradient(180deg, var(--statusbar) 0, color-mix(in srgb, var(--statusbar) 55%, transparent) 40px, transparent 120px), var(--wallpaper-light);
 }

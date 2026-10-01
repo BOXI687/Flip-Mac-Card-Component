@@ -2,7 +2,7 @@
  * 地图小组件（Map，只有中号）
  *   整张卡是一幅自己画的、抽象的深色街道图（SVG）：几条街、一块公园、一片水、几个编出来的街名；
  *   一条蓝色的路线，起点是白点，终点是红色的大头针；
- *   左下角一块深色的小面板：去公司（或回家）、22 分钟、现在出发，几点到、比平时快几分钟。
+ *   左下角一块深色的小面板：去公司（或回家）、22 分钟、现在出发，几点到（「比平时快几分钟」只在偷看时出现）。
  *
  * 街道图不是真的地图，街名、形状都是编的（网站是公开的，不放任何真实地点、不用任何地图 App 的图）。
  * 面板里的文字全部来自 story.js：「几点到」= 现在 + 22 分钟，早上去公司、中午以后回家。
@@ -90,7 +90,8 @@ export default function MapWidget() {
           <span className="map__unit">分钟</span>
         </p>
         <p className="map__depart" data-peek="rest">{commute.departText}</p>
-        <p className="map__note" data-peek="note">{commute.note}</p>
+        {/* 「比平时快 3 分钟」平时不显示（面板只留三行，Boxi：四行太挤），只在偷看时出现，从「现在出发」那一行出发 */}
+        <p className="map__note" data-peek="note" data-peek-only aria-hidden="true">{commute.note}</p>
         {/* 只在偷看时出现：大号的「22 分钟到家」（从面板里大号的 22 分钟那里出发） */}
         <p className="map__peek-eta" data-peek="eta" data-peek-only aria-hidden="true">
           {commute.minutes}
